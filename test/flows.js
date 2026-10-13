@@ -79,11 +79,15 @@ const { openFlow } = require("../out/commands/flows");
   await assert.rejects(openFlow(nodes[0]), /Update VS Code/);
   vscode.commands.getCommands = async () => ["workbench.action.browser.open"];
   vscode.commands.executeCommand = async (...args) => { opened = args; };
-  vscode.__state.installedExtensions = ["boylett.integrated-browser-extensions"];
+  vscode.__state.installedExtensions = [];
   const context = {
     extensionPath: "C:/extensions/lantern",
     globalState: { get: () => undefined, update: async () => {} },
   };
+  await openFlow(nodes[0], context);
+  assert.equal(vscode.__state.configGlobal?.["integratedBrowserExtensions.extensionDirectory"], undefined,
+    "dark-mode setup is skipped when the styling extension is not installed");
+  vscode.__state.installedExtensions = ["boylett.integrated-browser-extensions"];
   await openFlow(nodes[0], context);
   assert.deepEqual(vscode.__state.configGlobal["integratedBrowserExtensions.extensionDirectory"], [
     "C:\\extensions\\lantern\\resources\\browser-styles",
