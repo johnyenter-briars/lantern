@@ -91,11 +91,6 @@
     ],
     "commands": [
       {
-        "command": "lantern.flows.open",
-        "title": "Open Power Automate Flow",
-        "category": "Lantern"
-      },
-      {
         "command": "lantern.initWorkspace",
         "title": "Initialize Workspace",
         "category": "Lantern"
@@ -900,10 +895,6 @@
     ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "lantern.flows.open",
-          "when": "false"
-        },
         {
           "command": "lantern.configureClient",
           "when": "false"

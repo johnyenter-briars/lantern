@@ -16,7 +16,6 @@ import { migrateLegacySettings, noticeLegacyExtension } from "./ui/migrate";
 import { registerAnalysisCommands } from "./commands/analysis";
 import { registerEnvironmentCommands } from "./commands/environments";
 import { registerSolutionOps } from "./commands/solutionOps";
-import { openFlow } from "./commands/flows";
 import { registerStepCommands } from "./commands/registerStep";
 import { registerCsvImport } from "./commands/csvImport";
 import { registerSecurityCommands } from "./commands/security";
@@ -114,7 +113,6 @@ export function activate(context: vscode.ExtensionContext): void {
       for (const doc of vscode.workspace.textDocuments) diagnostics.schedule(doc, 0);
     }),
     ...registerSolutionOps(tableDocs, checker),
-    cmd("flows.open", (node) => openFlow(node, context)),
     ...registerStepCommands(serviceFor, () => clients.reloadSections("steps")),
     ...registerCsvImport(serviceFor, results),
     ...registerSecurityCommands(serviceFor, results, tableDocs),

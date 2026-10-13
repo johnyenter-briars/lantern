@@ -5,10 +5,9 @@ Module._resolveFilename = function (request, ...rest) {
   return request === "vscode" ? require.resolve("./mock-vscode") : resolve.call(this, request, ...rest);
 };
 const vscode = require("./mock-vscode");
-const { fetchSolutionFlows, flowEditorUrl } = require("../out/core/flows");
+const { fetchSolutionFlows } = require("../out/core/flows");
 const { WorkspaceTree } = require("../out/ui/workspaceTree");
 const auth = require("../out/ui/auth");
-const { openFlow } = require("../out/commands/flows");
 
 (async () => {
   const calls = [];
@@ -36,10 +35,6 @@ const { openFlow } = require("../out/commands/flows");
   assert.equal(calls.length, 2);
   await assert.rejects(fetchSolutionFlows({ getAll: async () => [] }, "Missing"), /no solution named/);
   const flow = flows[0];
-  assert.equal(await flowEditorUrl(dv, flow.id), `https://make.powerautomate.com/environments/env-1/flows/${flow.id}?v3=true`);
-  await assert.rejects(flowEditorUrl({ getJson: async () => ({ Detail: {} }) }, flow.id), /environment ID/);
-  await assert.rejects(flowEditorUrl(dv, "invalid"), /flow ID is invalid/);
-
   auth.dataverseFor = () => dv;
   const client = { name: "Acme", orgHost: "acme.crm.dynamics.com", config: { org: "https://acme.crm.dynamics.com" } };
   const tree = new WorkspaceTree(() => ({ forget() {} }), { onDidChangeTreeData() {} }, {});
@@ -53,7 +48,7 @@ const { openFlow } = require("../out/commands/flows");
   assert.equal(calls.length, before);
   const item = tree.getTreeItem(nodes[0]);
   assert.equal(item.description, "On");
-  assert.equal(item.command.command, "lantern.flows.open");
+  assert.equal(item.command, undefined, "flow entries are informational and do not open a designer");
   for (const target of [part, solution, undefined]) {
     tree.refresh(target);
     const count = calls.length;
@@ -74,24 +69,5 @@ const { openFlow } = require("../out/commands/flows");
   ids = [];
   tree.refresh(part);
   assert.match((await tree.getChildren(part))[0].text, /No Power Automate flows/);
-  let opened;
-  vscode.commands.getCommands = async () => [];
-  await assert.rejects(openFlow(nodes[0]), /Update VS Code/);
-  vscode.commands.getCommands = async () => ["workbench.action.browser.open"];
-  vscode.commands.executeCommand = async (...args) => { opened = args; };
-  vscode.__state.installedExtensions = [];
-  const context = {
-    extensionPath: "C:/extensions/lantern",
-    globalState: { get: () => undefined, update: async () => {} },
-  };
-  await openFlow(nodes[0], context);
-  assert.equal(vscode.__state.configGlobal?.["integratedBrowserExtensions.extensionDirectory"], undefined,
-    "dark-mode setup is skipped when the styling extension is not installed");
-  vscode.__state.installedExtensions = ["boylett.integrated-browser-extensions"];
-  await openFlow(nodes[0], context);
-  assert.deepEqual(vscode.__state.configGlobal["integratedBrowserExtensions.extensionDirectory"], [
-    "C:\\extensions\\lantern\\resources\\browser-styles",
-  ]);
-  assert.deepEqual(opened, ["workbench.action.browser.open", await flowEditorUrl(dv, flow.id)]);
-  console.log("Flow tests passed: solution filtering, batching, empty/missing solutions, environment routing, tree caching/refresh, and browser launch.");
+  console.log("Flow tests passed: solution filtering, batching, empty/missing solutions, environment routing, and tree caching/refresh.");
 })().catch(err => { console.error(err); process.exitCode = 1; });

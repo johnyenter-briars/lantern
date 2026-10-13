@@ -600,8 +600,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
         item.description = node.flow.state === 1 ? "On" : node.flow.state === 0 ? "Off" : "Suspended";
         item.iconPath = new vscode.ThemeIcon("git-merge");
         item.contextValue = "flow";
-        item.tooltip = `${node.flow.name}\n${node.flow.description}\nOpen the Power Automate designer inside VS Code.`;
-        item.command = { command: "lantern.flows.open", title: "Open Flow", arguments: [node] };
+        item.tooltip = `${node.flow.name}\n${node.flow.description}`;
         return item;
       }
       case "webResource": {

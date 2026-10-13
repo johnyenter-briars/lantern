@@ -28,13 +28,3 @@ export async function fetchSolutionFlows(dv: DataverseClient, uniqueName: string
   }
   return flows.sort((a, b) => a.name.localeCompare(b.name));
 }
-
-export async function flowEditorUrl(dv: DataverseClient, flowId: string): Promise<string> {
-  if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(flowId)) throw new UserError("The flow ID is invalid. Refresh the solution and try again.");
-  const { Detail } = await dv.getJson<{ Detail: { EnvironmentId?: string } }>(
-    "RetrieveCurrentOrganization(AccessType=@p)?@p=Microsoft.Dynamics.CRM.EndpointAccessType'Default'"
-  );
-  const environmentId = Detail?.EnvironmentId?.trim();
-  if (!environmentId) throw new UserError("Dataverse didn't return a Power Platform environment ID for this org.");
-  return `https://make.powerautomate.com/environments/${encodeURIComponent(environmentId)}/flows/${encodeURIComponent(flowId)}?v3=true`;
-}
