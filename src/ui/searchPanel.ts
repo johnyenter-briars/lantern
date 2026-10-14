@@ -2,7 +2,10 @@ import { randomBytes } from "crypto";
 import * as vscode from "vscode";
 import { parseSearchCommand } from "../core/commandParser";
 import { searchPowerAutomateFlows } from "../core/dataverseSearch";
+import { Client } from "../core/clients";
+import { openPowerAutomateFlow } from "../commands/openPowerAutomateFlow";
 import { dataverseFor } from "./auth";
+import { reportError } from "./context";
 import { activeTenant } from "./tenantContext";
 
 interface SearchPanelRow {
@@ -17,6 +20,7 @@ interface SearchPanelRow {
 
 let panel: vscode.WebviewPanel | undefined;
 let latestRows: SearchPanelRow[] = [];
+let latestClient: Client | undefined;
 let searchGeneration = 0;
 
 export function showSearchPanel(): void {
@@ -33,6 +37,7 @@ export function showSearchPanel(): void {
   );
   panel = current;
   latestRows = [];
+  latestClient = undefined;
   current.webview.html = renderSearchHtml(current.webview);
 
   const messageSubscription = current.webview.onDidReceiveMessage(async (message: { type?: string; input?: unknown; index?: unknown }) => {
@@ -42,15 +47,20 @@ export function showSearchPanel(): void {
     }
     if (message.type === "select" && Number.isInteger(message.index)) {
       const selected = latestRows.find((row) => row.index === message.index);
-      if (!selected) return;
-      current.dispose();
-      void vscode.window.showInformationMessage(`${selected.name} · ${selected.client} · ${selected.environment}`);
+      const client = latestClient;
+      if (!selected || !client) return;
+      try {
+        await openPowerAutomateFlow(client, selected.flowId);
+        current.dispose();
+      }
+      catch (error) { reportError(error); }
       return;
     }
     if (message.type !== "search" || typeof message.input !== "string") return;
 
     const generation = ++searchGeneration;
     latestRows = [];
+    latestClient = undefined;
     const parsed = parseSearchCommand(message.input);
     if (!("command" in parsed)) {
       await current.webview.postMessage({ type: "error", message: parsed.error });
@@ -73,6 +83,7 @@ export function showSearchPanel(): void {
         state: flow.state,
       }));
       latestRows = rows;
+      latestClient = tenant.envName ? tenant.withEnvironment(tenant.envName) : tenant;
       await current.webview.postMessage({
         type: "results",
         query: parsed.command.query,
@@ -168,7 +179,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
       outline: none;
     }
     .query:focus { border-color: var(--vscode-focusBorder); outline: 1px solid var(--vscode-focusBorder); }
-    .submit, .select-button {
+    .submit {
       padding: 0 14px;
       color: var(--vscode-button-foreground);
       background: var(--vscode-button-background);
@@ -177,8 +188,8 @@ function renderSearchHtml(webview: vscode.Webview): string {
       font: inherit;
       cursor: pointer;
     }
-    .submit:hover, .select-button:hover { background: var(--vscode-button-hoverBackground); }
-    .submit:focus-visible, .select-button:focus-visible, .close:focus-visible, .result:focus-visible {
+    .submit:hover { background: var(--vscode-button-hoverBackground); }
+    .submit:focus-visible, .close:focus-visible, .result:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
     }
@@ -244,8 +255,6 @@ function renderSearchHtml(webview: vscode.Webview): string {
     }
     #status { flex: 1; }
     .warning { color: var(--vscode-editorWarning-foreground, #cca700); overflow-wrap: anywhere; }
-    .select-button { min-height: 30px; }
-    .select-button:disabled { opacity: .55; cursor: default; }
     .spinner { display: inline-block; width: 12px; height: 12px; margin-right: 7px; border: 2px solid var(--vscode-descriptionForeground); border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 680px) {
@@ -266,7 +275,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
       <header class="heading">
         <div class="heading-copy">
           <h1 id="title">Lantern Search</h1>
-          <p class="subtitle">Search across your configured Dataverse environments.</p>
+          <p class="subtitle">Search the selected Dataverse environment.</p>
         </div>
         <button class="close" id="close" type="button" aria-label="Close search">×</button>
       </header>
@@ -280,7 +289,6 @@ function renderSearchHtml(webview: vscode.Webview): string {
       </section>
       <footer class="footer">
         <span id="status" role="status" aria-live="polite">Enter a command such as /g /pa button.</span>
-        <button class="select-button" id="selectButton" type="button" disabled>Select</button>
       </footer>
     </section>
   </main>
@@ -291,21 +299,36 @@ function renderSearchHtml(webview: vscode.Webview): string {
     const resultsWrap = document.getElementById('resultsWrap');
     const rowsContainer = document.getElementById('rows');
     const status = document.getElementById('status');
-    const selectButton = document.getElementById('selectButton');
-    let selectedIndex = null;
+    let resultIndexes = [];
+    let numberBuffer = '';
+    let numberTimer;
 
     document.getElementById('close').addEventListener('click', () => vscode.postMessage({ type: 'close' }));
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') vscode.postMessage({ type: 'close' });
+      if (!/^\\d$/.test(event.key) || resultsWrap.hidden || document.activeElement === queryInput || event.ctrlKey || event.altKey || event.metaKey) return;
+      event.preventDefault();
+      clearTimeout(numberTimer);
+      numberBuffer += event.key;
+      const matches = resultIndexes.filter((index) => String(index).startsWith(numberBuffer));
+      if (!matches.length) { numberBuffer = ''; return; }
+      const index = Number(numberBuffer);
+      if (matches.length === 1 && matches[0] === index) {
+        vscode.postMessage({ type: 'select', index });
+        numberBuffer = '';
+      } else {
+        numberTimer = setTimeout(() => {
+          if (resultIndexes.includes(index)) vscode.postMessage({ type: 'select', index });
+          numberBuffer = '';
+        }, 550);
+      }
     });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      selectedIndex = null;
-      selectButton.disabled = true;
+      resultIndexes = [];
+      numberBuffer = '';
+      clearTimeout(numberTimer);
       vscode.postMessage({ type: 'search', input: queryInput.value });
-    });
-    selectButton.addEventListener('click', () => {
-      if (selectedIndex !== null) vscode.postMessage({ type: 'select', index: selectedIndex });
     });
 
     function textCell(className, text) {
@@ -317,8 +340,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
 
     function renderRows(data) {
       rowsContainer.replaceChildren();
-      selectedIndex = null;
-      selectButton.disabled = true;
+      resultIndexes = data.rows.map((row) => row.index);
       for (const row of data.rows) {
         const button = document.createElement('button');
         button.className = 'result grid';
@@ -350,15 +372,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
         button.append(solutions);
 
         button.addEventListener('click', () => {
-          for (const item of rowsContainer.querySelectorAll('.result')) {
-            item.classList.remove('selected');
-            item.setAttribute('aria-selected', 'false');
-          }
-          button.classList.add('selected');
-          button.setAttribute('aria-selected', 'true');
-          selectedIndex = row.index;
-          selectButton.disabled = false;
-          status.textContent = 'Selected ' + row.name + ' from ' + row.client + '.';
+          vscode.postMessage({ type: 'select', index: row.index });
         });
         rowsContainer.append(button);
       }
@@ -370,6 +384,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
       const count = data.rows.length + ' flow' + (data.rows.length === 1 ? '' : 's') + ' found across ' + data.environmentCount + ' configured environment' + (data.environmentCount === 1 ? '' : 's') + '.';
       status.textContent = data.failures.length ? count + ' ' + data.failures.length + ' environment search' + (data.failures.length === 1 ? '' : 'es') + ' failed: ' + data.failures.join(' · ') : count;
       if (data.failures.length) status.classList.add('warning'); else status.classList.remove('warning');
+      if (data.rows.length) { rowsContainer.tabIndex = -1; rowsContainer.focus(); }
     }
 
     window.addEventListener('message', (event) => {
@@ -378,7 +393,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
         resultsWrap.hidden = false;
         rowsContainer.replaceChildren();
         rowsContainer.append(textCell('empty', 'Searching Power Automate flows…'));
-        status.textContent = 'Searching all configured client environments for “' + message.query + '”…';
+        status.textContent = 'Searching the selected Dataverse environment for “' + message.query + '”…';
         status.classList.remove('warning');
       } else if (message.type === 'results') {
         renderRows(message);

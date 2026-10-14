@@ -45,6 +45,15 @@
           "tenant": {
             "type": "string"
           },
+          "defaultBrowser": {
+            "type": "string",
+            "enum": ["firefox"],
+            "description": "Browser to use for maker portal links. Omit to use the system default browser."
+          },
+          "defaultProfile": {
+            "type": "string",
+            "description": "Firefox profile name passed with -P when defaultBrowser is firefox."
+          },
           "protected": {
             "type": "boolean",
             "description": "Ask before pushes, imports, publishing, and data changes here."

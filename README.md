@@ -395,7 +395,7 @@ For multiple tenants in one local config, use a list. `defaultTenant` selects th
       "name": "Contoso",
       "defaultEnvironment": "DEV",
       "environments": [
-        { "name": "DEV", "org": "https://contoso-dev.crm.dynamics.com" },
+        { "name": "DEV", "org": "https://contoso-dev.crm.dynamics.com", "defaultBrowser": "firefox", "defaultProfile": "contoso-dev" },
         { "name": "PROD", "org": "https://contoso.crm.dynamics.com", "protected": true }
       ],
       "solutions": ["ContosoCore"]
@@ -403,6 +403,8 @@ For multiple tenants in one local config, use a list. `defaultTenant` selects th
   ]
 }
 ```
+
+Set `defaultBrowser` and `defaultProfile` on an environment to open its Dataverse and Power Automate links with `firefox -P <profile> <url>`. Without `defaultBrowser`, Lantern uses the system default browser. Clicking a flow or typing its search result number opens its Power Automate editor.
 
 Existing single-tenant `.lantern/config.json` files still load with the folder name as their tenant name.
 

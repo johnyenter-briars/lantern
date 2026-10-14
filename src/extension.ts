@@ -9,6 +9,8 @@ import { pullCommand, registerReviewCommands } from "./commands/pull";
 import { compareWebResource, DataverseContentProvider, newFormScript, onSavePush, pushWebResources } from "./commands/webResources";
 import { clearTokenCache, dataverseFor } from "./ui/auth";
 import { WorkspaceTree } from "./ui/workspaceTree";
+import { openPowerAutomateFlow } from "./commands/openPowerAutomateFlow";
+import { openEnvironmentUrl } from "./ui/environmentBrowser";
 import { useSecrets } from "./ui/auth";
 import { registerAdminCommands } from "./commands/admin";
 import { migrateLegacySettings, noticeLegacyExtension } from "./ui/migrate";
@@ -109,6 +111,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerCompletionItemProvider({ language: "sql" }, new SqlCompletions(serviceFor), "."),
     ...registerTraceCommands(traces, traceDocs),
     cmd("search", () => openSearch()),
+    cmd("openPowerAutomateFlow", (node: { client: Client; flow: { id: string } }) => openPowerAutomateFlow(node.client, node.flow.id)),
+    cmd("openEnvironmentLink", (client: Client, url: string) => openEnvironmentUrl(client, url)),
     cmd("addTenant", () => addTenantCommand(refreshAll)),
     cmd("selectTenant", () => selectTenantCommand(refreshAll)),
     ...registerAdminCommands(clients, serviceFor, results, traceDocs, contentProvider),

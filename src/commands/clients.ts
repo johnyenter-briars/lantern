@@ -8,6 +8,7 @@ import { connectRepo, repoNameFromUrl } from "../core/git";
 import { run } from "../core/process";
 import { primaryRoot, resolveClient, settings, withProgress, workspaceRoots, write } from "../ui/context";
 import { activeTenant, addTenant, tenantConfigFile, tenantMode } from "../ui/tenantContext";
+import { openEnvironmentUrl } from "../ui/environmentBrowser";
 
 /** Sets up the parent folder: package.json with @types/xrm, a .gitignore that keeps client clones out. */
 export async function initWorkspace(): Promise<void> {
@@ -139,7 +140,7 @@ export async function openClientConfig(arg?: unknown): Promise<void> {
 export async function openInBrowser(arg?: unknown): Promise<void> {
   const client = await resolveClient(arg);
   if (!client?.config.org) return;
-  await vscode.env.openExternal(vscode.Uri.parse(`${client.config.org}/main.aspx`));
+  await openEnvironmentUrl(client, `${client.config.org}/main.aspx`);
 }
 
 /** Restores NuGet packages for any C# solutions so C# Dev Kit has IntelliSense right away. Non-fatal. */

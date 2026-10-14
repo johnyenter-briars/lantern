@@ -126,6 +126,10 @@ export interface EnvironmentConfig {
   protected?: boolean;
   /** App registration (service principal) to sign in with here instead of a user account. */
   appId?: string;
+  /** Browser used for maker portal links. Omit to use the system default. */
+  defaultBrowser?: "firefox";
+  /** Firefox profile name used with -P. */
+  defaultProfile?: string;
 }
 
 export interface ClientConfig {

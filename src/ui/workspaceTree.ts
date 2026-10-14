@@ -601,6 +601,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
         item.iconPath = new vscode.ThemeIcon("git-merge");
         item.contextValue = "flow";
         item.tooltip = `${node.flow.name}\n${node.flow.description}`;
+        item.command = { command: "lantern.openPowerAutomateFlow", title: "Open flow editor", arguments: [node] };
         return item;
       }
       case "webResource": {
@@ -728,7 +729,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
         item.command = node.commandId
           ? { command: node.commandId, title: node.label, arguments: [node.client] }
           : node.link
-          ? { command: "vscode.open", title: "Open", arguments: [vscode.Uri.parse(node.link)] }
+          ? { command: "lantern.openEnvironmentLink", title: "Open", arguments: [node.client, node.link] }
           : node.children?.length
             ? undefined
             : { command: "lantern.copyText", title: "Copy", arguments: [node.value] };

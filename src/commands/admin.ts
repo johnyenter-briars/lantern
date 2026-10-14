@@ -6,6 +6,7 @@ import { auditHistory, fetchOrgSolutions, fetchUsers, formatJob, inspectRecord, 
 import { findWebResourceFile } from "../core/handlers";
 import { DataverseContentProvider } from "./webResources";
 import { Client } from "../core/clients";
+import { openEnvironmentUrl } from "../ui/environmentBrowser";
 import { CODE_FORMATS, generate } from "../core/codegen";
 import { findFiles } from "../core/files";
 import { MetadataService, TableMeta } from "../core/metadata";
@@ -472,7 +473,7 @@ function recordOf(set: ResultSet, ctx: CellContext): { table: string; id: string
 }
 
 async function openInBrowser(client: Client, table: string, id: string): Promise<void> {
-  await vscode.env.openExternal(vscode.Uri.parse(`${client.config.org}/main.aspx?etn=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}&pagetype=entityrecord`));
+  await openEnvironmentUrl(client, `${client.config.org}/main.aspx?etn=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}&pagetype=entityrecord`);
 }
 
 export function statementAtCursor(text: string, offset: number): string {
