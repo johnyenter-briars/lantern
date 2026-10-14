@@ -1,8 +1,25 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Lantern client settings",
+  "title": "Lantern tenant settings",
   "type": "object",
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of this tenant in the tenants list."
+    },
+    "defaultTenant": {
+      "type": "string",
+      "description": "Tenant to select when this folder opens. Use a name from tenants."
+    },
+    "tenants": {
+      "type": "array",
+      "description": "Named tenant connections available in this folder.",
+      "items": { "allOf": [{ "$ref": "#" }, { "required": ["name"] }] }
+    },
+    "folder": {
+      "type": "string",
+      "description": "Optional project folder for this tenant. Normally omitted in folder mode."
+    },
     "org": {
       "type": "string",
       "description": "Dataverse org URL, e.g. https://contoso.crm.dynamics.com"
@@ -37,7 +54,11 @@
     },
     "environment": {
       "type": "string",
-      "description": "Name of the active environment. Switch it from the status bar or the client's menu."
+      "description": "Legacy single-connection setting. Named tenant entries use defaultEnvironment instead."
+    },
+    "defaultEnvironment": {
+      "type": "string",
+      "description": "Environment to select when this tenant opens. Use a name from environments. Switch Environment changes the current window without changing this default."
     },
     "accounts": {
       "type": "object",

@@ -36,7 +36,9 @@ Lantern for Dataverse is a suite of tools designed to help developers work on Dy
 
 Lantern runs in VS Code 1.90 or later.
 
-Expand **Clients > your client > Solutions > your solution > Power Automate flows** to list cloud flows in that solution. The list comes from the client's selected Dataverse environment and shows each flow's status. Use Lantern's Refresh action to reload it after adding or changing flows.
+Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to list cloud flows in that solution. The list comes from the selected Dataverse environment and shows each flow's status. Use Lantern's Refresh action to reload it after adding or changing flows.
+
+Run **Lantern: Search** from the Command Palette and enter `/g /pa <flow name>` to search cloud flows in the selected tenant. Results show their index, name, and solution memberships.
 
 Classic workflows and desktop flows are excluded from this list.
 
@@ -85,13 +87,13 @@ The C# Dev Kit extension is recommended for C# IntelliSense.
 
 1. Open the folder that holds (or will hold) your client folders, then click the **Lantern** icon in the activity bar.
 2. Run **Initialize Workspace** once. It creates a `package.json` with `@types/xrm`, a `.gitignore` that keeps client folders out of any repo at this level, and runs `npm install`.
-3. Click **New Client** and answer four prompts: the Azure DevOps repo URL (leave it blank for a local-only folder), the folder name, the org URL, and the solution names.
+3. Click **Add Tenant**, enter the Dataverse URL and optional Entra tenant and solution names, then select the tenant to work with. **New Tenant Folder** also creates a local project folder or clones an Azure DevOps repo.
 
 The **Get started with Lantern** walkthrough (**Help > Get Started**) covers adding a client, signing in, environments, pull, push, and queries.
 
 ## Features
 
-### Clients view
+### Tenants view
 
 Everything about a client lives under its name in one tree:
 
@@ -381,7 +383,28 @@ None of them change data. They need a VS Code version with language model tools.
 
 ### Client settings
 
-Lantern has two independent client settings modes. The default `outside` mode uses Lantern's internal storage and ignores local configuration files. Use **Configure as Client** or **New Client** to initialize internal settings; startup and folder discovery do not initialize them automatically. In `folder` mode, settings live only in `.lantern/config.json`. **Edit Client Configuration** opens the active mode's settings with schema validation. Switching modes never imports, moves, or deletes settings. Root-level `client.json`, root-level `config.json`, `.lantern/client.json`, and `xdt.json` are ignored.
+Lantern uses one selected tenant at a time. In the default `global` mode, saved tenants live in Lantern's global extension storage and are available in every VS Code window. No tenant is selected when a window opens; use **Select Tenant** or **Add Tenant** at the top of the Tenants view. In `folder` mode, only tenants in `.lantern/config.json` at an open workspace root are available. Set `defaultTenant` to a tenant name to select it when the folder opens. **Edit Tenant Configuration** opens the active mode's JSON. Switching modes never moves or deletes settings. Root-level `client.json`, root-level `config.json`, `.lantern/client.json`, and `xdt.json` are ignored.
+
+For multiple tenants in one local config, use a list. `defaultTenant` selects the tenant when the folder opens, and each tenant's `defaultEnvironment` selects its initial Dataverse environment. **Switch Environment** changes the current window without changing that default.
+
+```json
+{
+  "defaultTenant": "Contoso",
+  "tenants": [
+    {
+      "name": "Contoso",
+      "defaultEnvironment": "DEV",
+      "environments": [
+        { "name": "DEV", "org": "https://contoso-dev.crm.dynamics.com" },
+        { "name": "PROD", "org": "https://contoso.crm.dynamics.com", "protected": true }
+      ],
+      "solutions": ["ContosoCore"]
+    }
+  ]
+}
+```
+
+Existing single-tenant `.lantern/config.json` files still load with the folder name as their tenant name.
 
 ```json
 {
@@ -415,8 +438,6 @@ In folder mode, Lantern only configures a workspace subfolder as a client automa
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `lantern.clientsFolder` | first workspace folder | Folder holding client folders |
-| `lantern.autoConfigureNewFolders` | `true` | In folder mode, configure new subfolders of the clients folder automatically |
 | `lantern.authMethod` | `vscode` | `azureCli` if a tenant blocks VS Code's Microsoft sign-in |
 | `lantern.publishAfterPush` | `true` | Publish web resources after pushing |
 | `lantern.pushOnSave` | `false` | Push web resources when saved |
@@ -428,7 +449,7 @@ In folder mode, Lantern only configures a workspace subfolder as a client automa
 | `lantern.metadata.completions` | `true` | Column, control, tab, and section suggestions and hovers |
 | `lantern.diagnostics.enabled` | `true` | Live warnings in form scripts |
 | `lantern.query.maxRows` | `5000` | Row limit for queries without `TOP`, and for `UPDATE`/`DELETE` |
-| `lantern.clientSettingsLocation` | `outside` | Keep client settings in Lantern's storage (`outside`) or in `.lantern/config.json` in the folder (`folder`) |
+| `lantern.clientSettingsLocation` | `global` | Use globally saved tenants (`global`) or tenants from a workspace root's `.lantern/config.json` (`folder`) |
 | `lantern.createJsconfig` | `true` | Create `jsconfig.json` in client folders for typed Xrm IntelliSense |
 
 ## Sign-in and multiple accounts

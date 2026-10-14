@@ -129,6 +129,8 @@ export interface EnvironmentConfig {
 }
 
 export interface ClientConfig {
+  /** Optional local project folder associated with this tenant. */
+  folder?: string;
   /** The org in use: the active environment's org, or the single org when there are no environments. */
   org: string;
   /** Microsoft account to sign in with (for the active environment). Empty: whichever account VS Code picks. */
@@ -141,6 +143,8 @@ export interface ClientConfig {
   environments: EnvironmentConfig[];
   /** Name of the active environment. */
   environment: string;
+  /** Environment selected when this named tenant is opened. */
+  defaultEnvironment?: string;
   /** Account per environment name, set by Sign In As. */
   accounts: Record<string, string>;
   solutions: string[];
@@ -165,9 +169,11 @@ export class Client {
   private stored: ClientConfig;
   /** The effective account/org/tenant computed for the active environment, to detect edits on save. */
   private effective: { org: string; account: string; tenant: string; appId: string };
+  private runtimeEnvironment?: string;
 
-  constructor(public readonly name: string, public readonly dir: string, stored: ClientConfig, activeOverride?: string) {
+  constructor(public readonly name: string, public readonly dir: string, stored: ClientConfig, activeOverride?: string, private readonly tenantFile?: string) {
     this.stored = stored;
+    this.runtimeEnvironment = activeOverride ?? (tenantFile ? stored.environment : undefined);
     this.config = resolveEnvironment(stored, activeOverride);
     this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
@@ -176,7 +182,7 @@ export class Client {
 
   /** The settings file: in Lantern's store, or .lantern/config.json in the client folder. */
   get configFile(): string {
-    return configPathFor(this.dir);
+    return this.tenantFile ?? configPathFor(this.dir);
   }
 
   get isRepo(): boolean {
@@ -211,7 +217,20 @@ export class Client {
 
   /** The same client pointed at another environment, without saving anything. */
   withEnvironment(name: string): Client {
-    return new Client(this.name, this.dir, this.stored, name);
+    return new Client(this.name, this.dir, this.stored, name, this.tenantFile);
+  }
+
+  /** In a named tenant list, environment choice is window state rather than a config field. */
+  selectEnvironment(name: string): void {
+    if (!this.stored.environments.some((environment) => environment.name === name)) return;
+    if (!this.tenantFile) {
+      this.config.environment = name;
+      this.save();
+      return;
+    }
+    this.runtimeEnvironment = name;
+    this.config = resolveEnvironment(this.stored, name);
+    this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
 
   get typingMode(): "generic" | "xdt" {
@@ -253,17 +272,89 @@ export class Client {
       s.tenant = c.tenant;
       s.appId = c.appId;
     }
-    writeJson(this.configFile, s);
+    if (this.tenantFile) {
+      const document = readTenantDocument(this.tenantFile);
+      const index = document.tenants.findIndex((tenant) => tenant.name === this.name);
+      const entry = serializeTenant(this.name, s);
+      if (index >= 0) document.tenants[index] = entry;
+      else document.tenants.push(entry);
+      writeJson(this.tenantFile, document);
+    } else {
+      writeJson(this.configFile, s);
+    }
     this.reload();
   }
 
   reload(): void {
-    const fresh = loadStored(this.dir);
+    const entry = this.tenantFile ? readTenantDocument(this.tenantFile).tenants.find((tenant) => tenant.name === this.name) : undefined;
+    const fresh = this.tenantFile ? (entry ? normalizeConfig(entry) : undefined) : loadStored(this.dir);
     if (!fresh) return;
     this.stored = fresh;
-    this.config = resolveEnvironment(fresh);
+    this.config = resolveEnvironment(fresh, this.runtimeEnvironment);
     this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
+}
+
+/** A config can contain several named tenant connections. The same shape is used locally and globally. */
+export interface TenantDocument {
+  defaultTenant?: string;
+  legacyImported?: boolean;
+  removedFolders?: string[];
+  tenants: TenantEntry[];
+}
+
+export type TenantEntry = Partial<ClientConfig> & { name: string };
+
+/** Save a named connection with a persistent default and no runtime environment selector. */
+export function serializeTenant(name: string, config: Partial<ClientConfig>): TenantEntry {
+  const entry: TenantEntry = { ...config, name };
+  if (entry.environments?.length) {
+    const configuredDefault = entry.defaultEnvironment || entry.environment;
+    entry.defaultEnvironment = entry.environments.some((environment) => environment.name === configuredDefault)
+      ? configuredDefault
+      : entry.environments[0].name;
+  } else {
+    delete entry.defaultEnvironment;
+  }
+  delete entry.environment;
+  if (!entry.environments?.length) {
+    delete entry.environments;
+  }
+  if (!entry.accounts || !Object.keys(entry.accounts).length) delete entry.accounts;
+  return entry;
+}
+
+export function readTenantDocument(file: string): TenantDocument {
+  if (!fs.existsSync(file)) return { tenants: [] };
+  const raw = readJson<Record<string, unknown>>(file);
+  if ("tenants" in raw && raw.tenants && typeof raw.tenants === "object") {
+    const tenants: TenantEntry[] = Array.isArray(raw.tenants)
+      ? (raw.tenants as Array<Partial<TenantEntry>>)
+          .filter((value) => value && typeof value.name === "string" && value.name.trim())
+          .map((value) => ({ ...value, name: value.name!.trim() } as TenantEntry))
+      : Object.entries(raw.tenants as Record<string, Partial<ClientConfig>>)
+          .filter(([name, value]) => !!name.trim() && !!value && typeof value === "object")
+          .map(([name, value]) => ({ ...value, name }));
+    return {
+      defaultTenant: typeof raw.defaultTenant === "string" ? raw.defaultTenant : undefined,
+      legacyImported: raw.legacyImported === true,
+      removedFolders: Array.isArray(raw.removedFolders) ? raw.removedFolders.filter((value): value is string => typeof value === "string") : [],
+      tenants,
+    };
+  }
+  // Existing single-connection configs remain readable until a second tenant is added.
+  if (!Object.keys(raw).length) return { tenants: [] };
+  const name = path.basename(path.dirname(path.dirname(file)));
+  return { defaultTenant: name, tenants: [{ ...(raw as Partial<ClientConfig>), name }] };
+}
+
+export function tenantsInFile(file: string, dir: string): Client[] {
+  const document = readTenantDocument(file);
+  return document.tenants.map(({ name, ...raw }) => {
+    const config = normalizeConfig(raw);
+    return new Client(name, config.folder ? path.resolve(dir, config.folder) : dir, config, undefined, file);
+  }
+  );
 }
 
 /** The effective config for an environment (the stored active one when none is given). */
@@ -296,13 +387,15 @@ export function normalizeConfig(raw: Partial<ClientConfig> & { url?: string }): 
     .filter((e) => e && e.name && e.org)
     .map((e) => ({ ...e, name: String(e.name).trim(), org: normalizeOrg(String(e.org)) }));
   return {
+    folder: typeof raw.folder === "string" ? raw.folder : undefined,
     org: normalizeOrg(raw.org ?? raw.url ?? ""),
     account: (raw.account ?? "").trim(),
     tenant: raw.tenant ?? "",
     appId: (raw.appId ?? "").trim(),
     publisherPrefix: (raw.publisherPrefix ?? "").trim(),
     environments,
-    environment: raw.environment ?? environments[0]?.name ?? "",
+    defaultEnvironment: typeof raw.defaultEnvironment === "string" ? raw.defaultEnvironment : undefined,
+    environment: raw.defaultEnvironment || raw.environment || environments[0]?.name || "",
     accounts: raw.accounts ?? {},
     solutions: toList(raw.solutions),
     entities: toList(raw.entities),

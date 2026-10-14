@@ -45,7 +45,7 @@ export function registerSolutionOps(docs: TableDocProvider, checker: vscode.Diag
     }),
 
     r("lantern.solutions.import", async (arg?: unknown) => {
-      const client = (arg as SolutionArg | undefined)?.client ?? (await resolveClient(arg));
+      const client = await resolveClient(arg);
       if (!client?.config.org) return;
       const picked = await vscode.window.showOpenDialog({
         canSelectMany: false,

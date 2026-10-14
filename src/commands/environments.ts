@@ -41,8 +41,7 @@ export function registerEnvironmentCommands(
       if (!pick) return;
       if (pick.add) await addEnvironment(client);
       else if (pick.env && pick.env !== client.envName) {
-        client.config.environment = pick.env;
-        client.save();
+        client.selectEnvironment(pick.env);
         forgetSignIn(client);
         vscode.window.setStatusBarMessage(`$(server-environment) ${client.name} is on ${client.envName} (${client.orgHost})`, 5000);
       }
@@ -58,7 +57,7 @@ export function registerEnvironmentCommands(
 
     r("lantern.environments.compare", async (arg?: unknown) => {
       const node = arg as { client?: Client; unique?: string } | undefined;
-      const client = node?.client ?? (await resolveClient(arg));
+      const client = await resolveClient(arg);
       if (!client) return;
       if (client.environments.length < 2) {
         const add = await vscode.window.showInformationMessage(`${client.name} has ${client.environments.length ? "one environment" : "no environments"}. Add another to compare them.`, "Add Environment");

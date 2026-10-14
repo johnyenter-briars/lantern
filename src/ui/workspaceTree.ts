@@ -171,7 +171,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
           out.push({
             kind: "hint",
             client: c,
-            text: "Set the org URL in .lantern/config.json to connect",
+            text: "Set the Dataverse URL in the tenant configuration to connect",
             command: { command: "lantern.openClientConfig", title: "Edit .lantern/config.json", arguments: [c] },
           });
         }
@@ -511,7 +511,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
         item.iconPath = new vscode.ThemeIcon("folder", new vscode.ThemeColor("disabledForeground"));
         item.contextValue = "unconfigured";
         item.resourceUri = vscode.Uri.file(node.dir);
-        item.tooltip = "Folder without .lantern/config.json. Configure it to use it as a client.";
+        item.tooltip = "Folder without a Lantern tenant configuration.";
         return item;
       }
       case "group": {

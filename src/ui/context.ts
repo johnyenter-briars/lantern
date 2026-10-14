@@ -1,19 +1,18 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { appSecret } from "./auth";
-import { Client, readClient, scanClients, FolderScan } from "../core/clients";
+import { Client, FolderScan } from "../core/clients";
 import { UserError } from "../core/errors";
-import { findUp, isInside } from "../core/files";
+import { isInside } from "../core/files";
 import { PacContext } from "../core/pac";
 import { Cancellation } from "../core/process";
+import { activeTenant } from "./tenantContext";
 
 export const SECTION = "lantern";
 
 export function settings() {
   const c = vscode.workspace.getConfiguration(SECTION);
   return {
-    clientsFolder: c.get<string>("clientsFolder", ""),
-    autoConfigureNewFolders: c.get<boolean>("autoConfigureNewFolders", true),
     authMethod: c.get<"vscode" | "azureCli">("authMethod", "vscode"),
     publishAfterPush: c.get<boolean>("publishAfterPush", true),
     pushOnSave: c.get<boolean>("pushOnSave", false),
@@ -27,7 +26,7 @@ export function settings() {
     metadataCompletions: c.get<boolean>("metadata.completions", true),
     queryMaxRows: Math.max(1, c.get<number>("query.maxRows", 5000)),
     diagnostics: c.get<boolean>("diagnostics.enabled", true),
-    clientSettingsLocation: c.get<"outside" | "folder">("clientSettingsLocation", "outside"),
+    clientSettingsLocation: c.get<"global" | "folder" | "outside">("clientSettingsLocation", "global") === "folder" ? "folder" as const : "global" as const,
     createJsconfig: c.get<boolean>("createJsconfig", true),
     typescriptPushOnSave: c.get<boolean>("typescript.pushOnSave", true),
   };
@@ -40,18 +39,9 @@ export function log(): vscode.OutputChannel {
 }
 export const write = (text: string): void => log().append(text);
 
-/**
- * The folder that holds client folders: the configured clientsFolder, else the
- * first workspace folder. A workspace folder that is itself a client also works.
- */
+/** The folders currently open in VS Code. */
 export function workspaceRoots(): string[] {
-  const configured = settings().clientsFolder;
-  const folders = (vscode.workspace.workspaceFolders ?? []).map((f: vscode.WorkspaceFolder) => f.uri.fsPath);
-  if (configured) {
-    const resolved = path.isAbsolute(configured) ? configured : folders[0] ? path.join(folders[0], configured) : configured;
-    return [resolved];
-  }
-  return folders;
+  return (vscode.workspace.workspaceFolders ?? []).map((f: vscode.WorkspaceFolder) => f.uri.fsPath);
 }
 
 export function primaryRoot(): string | undefined {
@@ -59,54 +49,20 @@ export function primaryRoot(): string | undefined {
 }
 
 export function scanAll(): FolderScan {
-  const result: FolderScan = { clients: [], unconfigured: [] };
-  for (const root of workspaceRoots()) {
-    const scan = scanClients(root);
-    result.clients.push(...scan.clients);
-    result.unconfigured.push(...scan.unconfigured);
-  }
-  return result;
+  const tenant = activeTenant();
+  return { clients: tenant ? [tenant] : [], unconfigured: [] };
 }
 
 export function clientForPath(file: string): Client | undefined {
-  for (const root of workspaceRoots()) {
-    if (!isInside(file, root)) continue;
-    const dir = findUp(file, (d) => !!readClient(d), root);
-    if (dir) return readClient(dir);
-  }
-  return undefined;
+  const tenant = activeTenant();
+  return tenant && isInside(file, tenant.dir) ? tenant : undefined;
 }
 
-/** Client from a tree node, a file URI, the active editor, or a quick pick, in that order. */
-export async function resolveClient(arg?: unknown): Promise<Client | undefined> {
-  const fromArg = clientFromArg(arg);
-  if (fromArg) return fromArg;
-  const active = vscode.window.activeTextEditor?.document.uri;
-  if (active?.scheme === "file") {
-    const c = clientForPath(active.fsPath);
-    if (c) return c;
-  }
-  const { clients } = scanAll();
-  if (clients.length === 1) return clients[0];
-  if (!clients.length) {
-    vscode.window.showWarningMessage('No client folders yet. Run "Dataverse: New Client" first.');
-    return undefined;
-  }
-  const pick = await vscode.window.showQuickPick(
-    clients.map((c) => ({ label: c.name, description: c.orgHost, client: c })),
-    { placeHolder: "Which client?" }
-  );
-  return pick?.client;
-}
-
-function clientFromArg(arg: unknown): Client | undefined {
-  if (!arg) return undefined;
-  if (arg instanceof Client) return arg;
-  const a = arg as { client?: Client; fsPath?: string; resourceUri?: vscode.Uri };
-  if (a.client instanceof Client) return a.client;
-  if (typeof a.fsPath === "string") return clientForPath(a.fsPath);
-  if (a.resourceUri?.fsPath) return clientForPath(a.resourceUri.fsPath);
-  return undefined;
+/** The one tenant selected for this VS Code window. */
+export async function resolveClient(_arg?: unknown): Promise<Client | undefined> {
+  const tenant = activeTenant();
+  if (!tenant) vscode.window.showWarningMessage('Select a tenant in Lantern before using this command.');
+  return tenant;
 }
 
 /**

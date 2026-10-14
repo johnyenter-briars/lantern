@@ -1,7 +1,7 @@
 {
   "name": "lantern",
   "displayName": "Lantern for Dataverse",
-  "description": "A suite for Dynamics 365 and Power Platform developers who work across many clients: client folders and repos, environments and app registrations, pull with review, web resource, plug-in, PCF, and Power Pages deployment, Custom APIs, SQL and FetchXML queries, record inspection, plug-in traces and steps, metadata, and Dataverse-aware IntelliSense.",
+  "description": "A suite for Dynamics 365 and Power Platform developers who work across tenants: environments and app registrations, pull with review, web resource, plug-in, PCF, and Power Pages deployment, Custom APIs, SQL and FetchXML queries, record inspection, plug-in traces and steps, metadata, and Dataverse-aware IntelliSense.",
   "version": "0.9.5",
   "publisher": "nbrandt7",
   "author": "Nathan Brandt",
@@ -60,7 +60,7 @@
       "lantern": [
         {
           "id": "lantern.clients",
-          "name": "Clients",
+          "name": "Tenants",
           "icon": "media/lantern.svg"
         },
         {
@@ -80,16 +80,33 @@
     "viewsWelcome": [
       {
         "view": "lantern.clients",
-        "contents": "No client folders yet.\n[New Client](command:lantern.newClient)\nFirst time here? Set up this folder to hold client folders:\n[Initialize Workspace](command:lantern.initWorkspace)",
+        "contents": "No tenant selected.\n[Select Tenant](command:lantern.selectTenant)\n[Add Tenant](command:lantern.addTenant)",
         "when": "workspaceFolderCount > 0"
       },
       {
         "view": "lantern.clients",
-        "contents": "Open the folder that holds (or will hold) your client folders.\n[Open Folder](command:vscode.openFolder)",
+        "contents": "Select a saved tenant or add a new one.\n[Select Tenant](command:lantern.selectTenant)\n[Add Tenant](command:lantern.addTenant)",
         "when": "workspaceFolderCount == 0"
       }
     ],
     "commands": [
+      {
+        "command": "lantern.addTenant",
+        "title": "Add Tenant…",
+        "category": "Lantern",
+        "icon": "$(add)"
+      },
+      {
+        "command": "lantern.selectTenant",
+        "title": "Select Tenant…",
+        "category": "Lantern",
+        "icon": "$(account)"
+      },
+      {
+        "command": "lantern.search",
+        "title": "Search",
+        "category": "Lantern"
+      },
       {
         "command": "lantern.initWorkspace",
         "title": "Initialize Workspace",
@@ -97,19 +114,19 @@
       },
       {
         "command": "lantern.newClient",
-        "title": "New Client…",
+        "title": "New Tenant Folder…",
         "category": "Lantern",
         "icon": "$(add)"
       },
       {
         "command": "lantern.configureClient",
-        "title": "Configure as Client",
+        "title": "Configure as Tenant",
         "category": "Lantern",
         "icon": "$(gear)"
       },
       {
         "command": "lantern.openClientConfig",
-        "title": "Edit Client Configuration",
+        "title": "Edit Tenant Configuration",
         "category": "Lantern",
         "icon": "$(settings-gear)"
       },
@@ -127,7 +144,7 @@
       },
       {
         "command": "lantern.clientActions",
-        "title": "Client Actions…",
+        "title": "Tenant Actions…",
         "category": "Lantern"
       },
       {
@@ -609,13 +626,13 @@
       },
       {
         "command": "lantern.solutions.addLocal",
-        "title": "Add to Client Configuration",
+        "title": "Add to Tenant Configuration",
         "category": "Lantern",
         "icon": "$(add)"
       },
       {
         "command": "lantern.solutions.remove",
-        "title": "Remove from Client",
+        "title": "Remove from Tenant",
         "category": "Lantern",
         "icon": "$(close)"
       },
@@ -888,7 +905,7 @@
       },
       {
         "command": "lantern.removeClient",
-        "title": "Remove Lantern from Folder…",
+        "title": "Remove Tenant…",
         "category": "Lantern",
         "icon": "$(trash)"
       }
@@ -1294,14 +1311,24 @@
       ],
       "view/title": [
         {
-          "command": "lantern.newClient",
+          "command": "lantern.addTenant",
           "when": "view == lantern.clients",
           "group": "navigation@1"
         },
         {
-          "command": "lantern.refresh",
+          "command": "lantern.selectTenant",
           "when": "view == lantern.clients",
           "group": "navigation@2"
+        },
+        {
+          "command": "lantern.newClient",
+          "when": "view == lantern.clients",
+          "group": "more"
+        },
+        {
+          "command": "lantern.refresh",
+          "when": "view == lantern.clients",
+          "group": "navigation@3"
         },
         {
           "command": "lantern.initWorkspace",
@@ -2258,16 +2285,6 @@
     "configuration": {
       "title": "Lantern",
       "properties": {
-        "lantern.clientsFolder": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Folder that holds your client folders. Empty means the first workspace folder. Relative paths resolve against it."
-        },
-        "lantern.autoConfigureNewFolders": {
-          "type": "boolean",
-          "default": true,
-          "description": "In folder mode, add .lantern/config.json and jsconfig.json to new subfolders of the clients folder automatically. Internal storage requires explicit client initialization."
-        },
         "lantern.authMethod": {
           "type": "string",
           "enum": [
@@ -2350,20 +2367,20 @@
         "lantern.clientSettingsLocation": {
           "type": "string",
           "enum": [
-            "outside",
+            "global",
             "folder"
           ],
-          "default": "outside",
+          "default": "global",
           "enumDescriptions": [
-            "Use Lantern's internal storage. Ignores local configuration files and waits for explicit client initialization.",
-            "Keep them in .lantern/config.json inside the client folder (kept out of git through the repo's local exclude list)."
+            "Use Lantern's global tenant storage across VS Code windows. Ignores local configuration files and requires tenant selection.",
+            "Use tenants in the folder's .lantern/config.json. The defaultTenant property selects one when the folder opens."
           ],
-          "description": "Where client settings (org, environments, solutions, accounts...) are kept. Storage modes are independent; switching does not import, move, or delete configurations."
+          "description": "Where tenant settings (org, environments, solutions, accounts...) are kept. Storage modes are independent; switching does not move or delete configurations."
         },
         "lantern.createJsconfig": {
           "type": "boolean",
           "default": true,
-          "description": "Create a jsconfig.json in each client folder for typed Xrm IntelliSense in form scripts. Lantern keeps it out of git through the repo's local exclude list, so no .gitignore changes are needed."
+          "description": "Create a jsconfig.json in each local project folder for typed Xrm IntelliSense in form scripts. Lantern keeps it out of git through the repo's local exclude list."
         }
       }
     },
@@ -2371,7 +2388,8 @@
       {
         "fileMatch": [
           "**/.lantern/config.json",
-          "**/*.lantern-client.json"
+          "**/*.lantern-client.json",
+          "**/tenants.json"
         ],
         "url": "./schemas/client.schema.json"
       },
@@ -2402,12 +2420,12 @@
     ],
     "languageModelTools": [
       {
-        "name": "lantern_clients",
-        "displayName": "Lantern: clients",
-        "toolReferenceName": "lanternClients",
+        "name": "lantern_tenants",
+        "displayName": "Lantern: tenants",
+        "toolReferenceName": "lanternTenants",
         "canBeReferencedInPrompt": true,
         "icon": "$(organization)",
-        "modelDescription": "Lists the Dynamics 365 / Dataverse client folders in this workspace with each one's org URL, environments (DEV/TEST/PROD, which are protected, which is active), and solutions. Call this first to learn client names for the other Lantern tools.",
+        "modelDescription": "Shows the selected Dynamics 365 / Dataverse tenant, its org URL, environments, and solutions. Select a tenant in Lantern first.",
         "inputSchema": {
           "type": "object",
           "properties": {}
@@ -2423,9 +2441,9 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "client": {
+            "tenant": {
               "type": "string",
-              "description": "Client folder name; optional when there's only one."
+              "description": "Selected tenant name (optional)."
             },
             "table": {
               "type": "string",
@@ -2447,9 +2465,9 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "client": {
+            "tenant": {
               "type": "string",
-              "description": "Client folder name; optional when there's only one."
+              "description": "Selected tenant name (optional)."
             },
             "query": {
               "type": "string",
@@ -2471,7 +2489,7 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "client": {
+            "tenant": {
               "type": "string"
             },
             "table": {
@@ -2494,12 +2512,12 @@
       {
         "id": "lantern.start",
         "title": "Get started with Lantern",
-        "description": "Set up a client, sign in, and the everyday loop: pull, push, query.",
+        "description": "Select a tenant, sign in, and use pull, push, and queries.",
         "steps": [
           {
             "id": "client",
-            "title": "Add a client",
-            "description": "Create a folder for a client, optionally from its Azure DevOps repo.\n[New Client](command:lantern.newClient)",
+            "title": "Add a tenant",
+            "description": "Save a Dataverse tenant connection.\n[Add Tenant](command:lantern.addTenant)",
             "media": {
               "markdown": "media/walkthrough/clients.md"
             },
@@ -2510,7 +2528,7 @@
           {
             "id": "signin",
             "title": "Sign in",
-            "description": "Pick the account (or app registration) the client uses.\n[Sign In As…](command:lantern.signInAs)",
+            "description": "Pick the account (or app registration) the selected tenant uses.\n[Sign In As…](command:lantern.signInAs)",
             "media": {
               "markdown": "media/walkthrough/signin.md"
             },
@@ -2521,7 +2539,7 @@
           {
             "id": "environments",
             "title": "Add DEV, TEST, PROD",
-            "description": "Add the client's other orgs and protect PROD.\n[Add Environment…](command:lantern.environments.add)",
+            "description": "Add the tenant's other orgs and protect PROD.\n[Add Environment…](command:lantern.environments.add)",
             "media": {
               "markdown": "media/walkthrough/environments.md"
             },
