@@ -37,7 +37,7 @@ export class ClientStatusBar {
     this.item.text = `$(cloud) ${client.name}${client.envName ? ` (${client.envName})` : client.orgHost ? ` (${client.orgHost.split(".")[0]})` : ""}`;
     this.item.backgroundColor = client.isProtected ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
     this.item.tooltip = client.config.org ? `${client.name}\n${client.config.org}\nClick for actions` : `${client.name}: no org set`;
-    this.item.command = { command: "lantern.clientActions", title: "Client actions", arguments: [client] };
+    this.item.command = { command: "lantern.clientActions", title: "Tenant actions", arguments: [client] };
     this.item.show();
   }
 
@@ -98,7 +98,7 @@ export class DataverseCodeLens implements vscode.CodeLensProvider {
   /**
    * Above each function a form runs: which forms and events call it. Handlers that
    * point at a function this file doesn't define get a warning at the top.
-   * Uses the forms of the script's table (from the file name, an annotation, or client.json).
+   * Uses the forms of the script's table (from the file name, an annotation, or .lantern/config.json).
    */
   /**
    * Each plug-in class in the file: Build and Push, its registration in the

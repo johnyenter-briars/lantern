@@ -8,7 +8,7 @@ import { isDirectory, readJson, writeJson } from "./files";
 
 /**
  * Folder outside the workspace where Lantern keeps each client's settings, so nothing
- * of Lantern's sits in a client's repo. Undefined: the older layout, client.json in the folder.
+ * of Lantern's sits in a client's repo. Undefined: use .lantern/config.json in the folder.
  */
 let storeDir: string | undefined;
 /** Folders the person removed Lantern from, which shouldn't be configured again automatically. */
@@ -30,13 +30,9 @@ export function storedConfigPath(dir: string): string | undefined {
   return storeDir ? path.join(storeDir, `${folderKey(dir)}.lantern-client.json`) : undefined;
 }
 
-/** The settings file in use for a folder: the stored one, else a client.json in the folder. */
+/** Storage modes are independent: never inspect or import the other mode's config. */
 function configPathFor(dir: string): string {
-  const stored = storedConfigPath(dir);
-  if (stored && fs.existsSync(stored)) return stored;
-  const legacy = path.join(dir, CLIENT_FILE);
-  if (fs.existsSync(legacy) || !stored) return legacy;
-  return stored;
+  return storedConfigPath(dir) ?? path.join(dir, CLIENT_FILE);
 }
 
 /** Whether git tracks a file (committed or staged). Unknown (no git) counts as tracked, to be safe. */
@@ -44,23 +40,6 @@ function isTracked(file: string): boolean {
   const r = spawnSync("git", ["ls-files", "--error-unmatch", path.basename(file)], { cwd: path.dirname(file), stdio: "ignore" });
   if (r.error) return true;
   return r.status === 0;
-}
-
-/**
- * Moves a folder's client.json into the store, unless the repo tracks it (then a team
- * put it there on purpose, so it stays). Returns true when it moved.
- */
-export function moveConfigToStore(dir: string): boolean {
-  const stored = storedConfigPath(dir);
-  const legacy = path.join(dir, CLIENT_FILE);
-  if (!stored || !fs.existsSync(legacy) || fs.existsSync(stored)) return false;
-  if (fs.existsSync(path.join(dir, ".git")) || isInsideGitRepo(dir)) {
-    if (isTracked(legacy)) return false;
-  }
-  fs.mkdirSync(path.dirname(stored), { recursive: true });
-  writeJson(stored, normalizeConfig(readJson<Partial<ClientConfig>>(legacy)));
-  fs.rmSync(legacy);
-  return true;
 }
 
 export function ignoredFolders(): string[] {
@@ -130,11 +109,11 @@ export function shouldAutoConfigure(dir: string, workspaceRoot: string): boolean
   return fs.existsSync(path.join(dir, ".git")) || !isInsideGitRepo(workspaceRoot);
 }
 
-export const CLIENT_FILE = "client.json";
+export const CLIENT_FILE = ".lantern/config.json";
 const RESERVED = new Set(["node_modules", "scripts", "tools", "out", "dist"]);
 
 /** Files the tooling adds to a client folder, kept out of the client's repo via .git/info/exclude. */
-const LOCAL_FILES = ["jsconfig.json", "client.json", "typings/", "typings.tmp/", ".pull-backup/", "exports/"];
+const LOCAL_FILES = ["jsconfig.json", ".lantern/config.json", "typings/", "typings.tmp/", ".pull-backup/", "exports/"];
 
 export interface EnvironmentConfig {
   /** Short label like DEV, TEST, PROD. */
@@ -147,9 +126,15 @@ export interface EnvironmentConfig {
   protected?: boolean;
   /** App registration (service principal) to sign in with here instead of a user account. */
   appId?: string;
+  /** Browser used for maker portal links. Omit to use the system default. */
+  defaultBrowser?: "firefox";
+  /** Firefox profile name used with -P. */
+  defaultProfile?: string;
 }
 
 export interface ClientConfig {
+  /** Optional local project folder associated with this tenant. */
+  folder?: string;
   /** The org in use: the active environment's org, or the single org when there are no environments. */
   org: string;
   /** Microsoft account to sign in with (for the active environment). Empty: whichever account VS Code picks. */
@@ -162,6 +147,8 @@ export interface ClientConfig {
   environments: EnvironmentConfig[];
   /** Name of the active environment. */
   environment: string;
+  /** Environment selected when this named tenant is opened. */
+  defaultEnvironment?: string;
   /** Account per environment name, set by Sign In As. */
   accounts: Record<string, string>;
   solutions: string[];
@@ -186,18 +173,20 @@ export class Client {
   private stored: ClientConfig;
   /** The effective account/org/tenant computed for the active environment, to detect edits on save. */
   private effective: { org: string; account: string; tenant: string; appId: string };
+  private runtimeEnvironment?: string;
 
-  constructor(public readonly name: string, public readonly dir: string, stored: ClientConfig, activeOverride?: string) {
+  constructor(public readonly name: string, public readonly dir: string, stored: ClientConfig, activeOverride?: string, private readonly tenantFile?: string) {
     this.stored = stored;
+    this.runtimeEnvironment = activeOverride ?? (tenantFile ? stored.environment : undefined);
     this.config = resolveEnvironment(stored, activeOverride);
     this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
 
   config: ClientConfig;
 
-  /** The settings file: in Lantern's store, or a client.json in the folder (older layout, or committed by a team). */
+  /** The settings file: in Lantern's store, or .lantern/config.json in the client folder. */
   get configFile(): string {
-    return configPathFor(this.dir);
+    return this.tenantFile ?? configPathFor(this.dir);
   }
 
   get isRepo(): boolean {
@@ -232,7 +221,20 @@ export class Client {
 
   /** The same client pointed at another environment, without saving anything. */
   withEnvironment(name: string): Client {
-    return new Client(this.name, this.dir, this.stored, name);
+    return new Client(this.name, this.dir, this.stored, name, this.tenantFile);
+  }
+
+  /** In a named tenant list, environment choice is window state rather than a config field. */
+  selectEnvironment(name: string): void {
+    if (!this.stored.environments.some((environment) => environment.name === name)) return;
+    if (!this.tenantFile) {
+      this.config.environment = name;
+      this.save();
+      return;
+    }
+    this.runtimeEnvironment = name;
+    this.config = resolveEnvironment(this.stored, name);
+    this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
 
   get typingMode(): "generic" | "xdt" {
@@ -245,7 +247,7 @@ export class Client {
   }
 
   /**
-   * Writes edits made to `config` back to client.json. An account set while an
+   * Writes edits made to `config` back to .lantern/config.json. An account set while an
    * environment is active is saved as that environment's account.
    */
   save(): void {
@@ -274,17 +276,89 @@ export class Client {
       s.tenant = c.tenant;
       s.appId = c.appId;
     }
-    writeJson(this.configFile, s);
+    if (this.tenantFile) {
+      const document = readTenantDocument(this.tenantFile);
+      const index = document.tenants.findIndex((tenant) => tenant.name === this.name);
+      const entry = serializeTenant(this.name, s);
+      if (index >= 0) document.tenants[index] = entry;
+      else document.tenants.push(entry);
+      writeJson(this.tenantFile, document);
+    } else {
+      writeJson(this.configFile, s);
+    }
     this.reload();
   }
 
   reload(): void {
-    const fresh = loadStored(this.dir);
+    const entry = this.tenantFile ? readTenantDocument(this.tenantFile).tenants.find((tenant) => tenant.name === this.name) : undefined;
+    const fresh = this.tenantFile ? (entry ? normalizeConfig(entry) : undefined) : loadStored(this.dir);
     if (!fresh) return;
     this.stored = fresh;
-    this.config = resolveEnvironment(fresh);
+    this.config = resolveEnvironment(fresh, this.runtimeEnvironment);
     this.effective = { org: this.config.org, account: this.config.account, tenant: this.config.tenant, appId: this.config.appId };
   }
+}
+
+/** A config can contain several named tenant connections. The same shape is used locally and globally. */
+export interface TenantDocument {
+  defaultTenant?: string;
+  legacyImported?: boolean;
+  removedFolders?: string[];
+  tenants: TenantEntry[];
+}
+
+export type TenantEntry = Partial<ClientConfig> & { name: string };
+
+/** Save a named connection with a persistent default and no runtime environment selector. */
+export function serializeTenant(name: string, config: Partial<ClientConfig>): TenantEntry {
+  const entry: TenantEntry = { ...config, name };
+  if (entry.environments?.length) {
+    const configuredDefault = entry.defaultEnvironment || entry.environment;
+    entry.defaultEnvironment = entry.environments.some((environment) => environment.name === configuredDefault)
+      ? configuredDefault
+      : entry.environments[0].name;
+  } else {
+    delete entry.defaultEnvironment;
+  }
+  delete entry.environment;
+  if (!entry.environments?.length) {
+    delete entry.environments;
+  }
+  if (!entry.accounts || !Object.keys(entry.accounts).length) delete entry.accounts;
+  return entry;
+}
+
+export function readTenantDocument(file: string): TenantDocument {
+  if (!fs.existsSync(file)) return { tenants: [] };
+  const raw = readJson<Record<string, unknown>>(file);
+  if ("tenants" in raw && raw.tenants && typeof raw.tenants === "object") {
+    const tenants: TenantEntry[] = Array.isArray(raw.tenants)
+      ? (raw.tenants as Array<Partial<TenantEntry>>)
+          .filter((value) => value && typeof value.name === "string" && value.name.trim())
+          .map((value) => ({ ...value, name: value.name!.trim() } as TenantEntry))
+      : Object.entries(raw.tenants as Record<string, Partial<ClientConfig>>)
+          .filter(([name, value]) => !!name.trim() && !!value && typeof value === "object")
+          .map(([name, value]) => ({ ...value, name }));
+    return {
+      defaultTenant: typeof raw.defaultTenant === "string" ? raw.defaultTenant : undefined,
+      legacyImported: raw.legacyImported === true,
+      removedFolders: Array.isArray(raw.removedFolders) ? raw.removedFolders.filter((value): value is string => typeof value === "string") : [],
+      tenants,
+    };
+  }
+  // Existing single-connection configs remain readable until a second tenant is added.
+  if (!Object.keys(raw).length) return { tenants: [] };
+  const name = path.basename(path.dirname(path.dirname(file)));
+  return { defaultTenant: name, tenants: [{ ...(raw as Partial<ClientConfig>), name }] };
+}
+
+export function tenantsInFile(file: string, dir: string): Client[] {
+  const document = readTenantDocument(file);
+  return document.tenants.map(({ name, ...raw }) => {
+    const config = normalizeConfig(raw);
+    return new Client(name, config.folder ? path.resolve(dir, config.folder) : dir, config, undefined, file);
+  }
+  );
 }
 
 /** The effective config for an environment (the stored active one when none is given). */
@@ -317,13 +391,15 @@ export function normalizeConfig(raw: Partial<ClientConfig> & { url?: string }): 
     .filter((e) => e && e.name && e.org)
     .map((e) => ({ ...e, name: String(e.name).trim(), org: normalizeOrg(String(e.org)) }));
   return {
+    folder: typeof raw.folder === "string" ? raw.folder : undefined,
     org: normalizeOrg(raw.org ?? raw.url ?? ""),
     account: (raw.account ?? "").trim(),
     tenant: raw.tenant ?? "",
     appId: (raw.appId ?? "").trim(),
     publisherPrefix: (raw.publisherPrefix ?? "").trim(),
     environments,
-    environment: raw.environment ?? environments[0]?.name ?? "",
+    defaultEnvironment: typeof raw.defaultEnvironment === "string" ? raw.defaultEnvironment : undefined,
+    environment: raw.defaultEnvironment || raw.environment || environments[0]?.name || "",
     accounts: raw.accounts ?? {},
     solutions: toList(raw.solutions),
     entities: toList(raw.entities),
@@ -357,7 +433,7 @@ export function readClient(dir: string): Client | undefined {
 
 export interface FolderScan {
   clients: Client[];
-  /** Subfolders that look like clients but have no client.json yet. */
+  /** Subfolders that look like clients but have no .lantern/config.json yet. */
   unconfigured: string[];
 }
 
@@ -380,11 +456,10 @@ export function scanClients(root: string): FolderScan {
 }
 
 /**
- * Makes sure a client folder has client.json and jsconfig.json and that both stay
+ * Makes sure a client folder has .lantern/config.json and jsconfig.json and that both stay
  * out of git. Never overwrites an existing jsconfig, so generated-type mode sticks.
  */
 export function ensureClientConfig(dir: string, initial: Partial<ClientConfig> = {}, options: { jsconfig?: boolean } = {}): Client {
-  migrateXdtJson(dir);
   if (options.jsconfig !== false && !fs.existsSync(path.join(dir, "jsconfig.json"))) writeJsconfig(dir, "generic");
   const existing = loadStored(dir);
   const stored = existing ? normalizeConfig({ ...initial, ...existing }) : normalizeConfig(initial);
@@ -413,9 +488,14 @@ export function isLanternJsconfig(file: string): boolean {
  */
 export function removeClientConfig(dir: string): void {
   const stored = storedConfigPath(dir);
-  if (stored && fs.existsSync(stored)) fs.rmSync(stored);
-  const legacy = path.join(dir, CLIENT_FILE);
-  if (fs.existsSync(legacy) && !isTracked(legacy)) fs.rmSync(legacy);
+  if (stored) {
+    if (fs.existsSync(stored)) fs.rmSync(stored);
+  } else {
+    const file = path.join(dir, CLIENT_FILE);
+    if (fs.existsSync(file) && !isTracked(file)) fs.rmSync(file);
+    const localDir = path.join(dir, ".lantern");
+    if (fs.existsSync(localDir) && fs.readdirSync(localDir).length === 0) fs.rmdirSync(localDir);
+  }
   const jsconfig = path.join(dir, "jsconfig.json");
   if (fs.existsSync(jsconfig) && isLanternJsconfig(jsconfig) && !isTracked(jsconfig)) fs.rmSync(jsconfig);
   setIgnored(dir, true);
@@ -430,13 +510,6 @@ export function writeJsconfig(dir: string, mode: "generic" | "xdt"): void {
       ? { compilerOptions: { checkJs: true, target: "ES2020", types: [] }, include: ["**/*.js", "typings/**/*.d.ts"], exclude }
       : { compilerOptions: { checkJs: true, target: "ES2020", types: ["xrm"] }, include: ["**/*.js"], exclude }
   );
-}
-
-function migrateXdtJson(dir: string): void {
-  const old = path.join(dir, "xdt.json");
-  if (!fs.existsSync(old) || fs.existsSync(path.join(dir, CLIENT_FILE))) return;
-  writeJson(path.join(dir, CLIENT_FILE), normalizeConfig(readJson(old)));
-  fs.rmSync(old);
 }
 
 /**

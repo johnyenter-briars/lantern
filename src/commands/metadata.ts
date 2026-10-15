@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { Client } from "../core/clients";
+import { openEnvironmentUrl } from "../ui/environmentBrowser";
 import { toPosix } from "../core/files";
 import { ColumnMeta, FormMeta, MetadataService, TableMeta } from "../core/metadata";
 import { clientForPath, resolveClient, withProgress } from "../ui/context";
@@ -194,11 +195,11 @@ export function registerMetadataCommands(
     }),
 
     r("lantern.metadata.openTableInBrowser", async (node: MetaNode) => {
-      if (node.kind === "table") await vscode.env.openExternal(vscode.Uri.parse(`${node.client.config.org}/main.aspx?pagetype=entitylist&etn=${node.table.logicalName}`));
+      if (node.kind === "table") await openEnvironmentUrl(node.client, `${node.client.config.org}/main.aspx?pagetype=entitylist&etn=${node.table.logicalName}`);
     }),
 
     r("lantern.metadata.newRecordInBrowser", async (node: MetaNode) => {
-      if (node.kind === "table") await vscode.env.openExternal(vscode.Uri.parse(`${node.client.config.org}/main.aspx?pagetype=entityrecord&etn=${node.table.logicalName}`));
+      if (node.kind === "table") await openEnvironmentUrl(node.client, `${node.client.config.org}/main.aspx?pagetype=entityrecord&etn=${node.table.logicalName}`);
     }),
 
     r("lantern.metadata.addEarlyBound", async (node: MetaNode) => {

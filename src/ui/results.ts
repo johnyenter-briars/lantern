@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { Client } from "../core/clients";
+import { openEnvironmentUrl } from "./environmentBrowser";
 import { Cell, cellText, ResultSet, toCsv, toJson } from "../core/query";
 
 export interface QueryOutcome {
@@ -131,9 +132,7 @@ async function copy(text: string): Promise<void> {
 }
 
 export async function openRecord(client: Client, table: string, id: string): Promise<void> {
-  await vscode.env.openExternal(
-    vscode.Uri.parse(`${client.config.org}/main.aspx?etn=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}&pagetype=entityrecord`)
-  );
+  await openEnvironmentUrl(client, `${client.config.org}/main.aspx?etn=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}&pagetype=entityrecord`);
 }
 
 async function saveResults(set: ResultSet, ext: "csv" | "json", formatted: boolean): Promise<void> {

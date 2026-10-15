@@ -424,7 +424,7 @@ async function ensureIlspy(): Promise<string | undefined> {
 
 export async function getPluginSource(arg: unknown, onChanged: Changed = () => undefined): Promise<void> {
   const node = arg as { client?: Client; assembly?: string | OrgAssembly } | undefined;
-  const client = node?.client ?? (await resolveClient(arg));
+  const client = await resolveClient(arg);
   if (!client?.config.org) return;
   const dv = dataverseFor(client);
   const all = await withProgress(`Loading plug-in assemblies from ${env(client)}`, () => customAssemblies(dv));

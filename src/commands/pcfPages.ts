@@ -136,7 +136,7 @@ export function registerPcfAndPages(onChanged: () => void): vscode.Disposable[] 
 
     // ---------- Power Pages ----------
     r("lantern.pages.download", async (arg?: unknown) => {
-      const client = (arg as { client?: Client })?.client ?? (await resolveClient(arg));
+      const client = await resolveClient(arg);
       if (!client?.config.org) return;
       const sites = await withProgress(`Listing Power Pages sites in ${client.orgHost}`, async (ctx) => {
         await ensureAuth(ctx, client);
@@ -177,7 +177,7 @@ export function registerPcfAndPages(onChanged: () => void): vscode.Disposable[] 
 
     r("lantern.pages.upload", async (arg?: unknown) => {
       const node = arg as Partial<SiteNode> | undefined;
-      const client = node?.client ?? (await resolveClient(arg));
+      const client = await resolveClient(arg);
       if (!client?.config.org) return;
       let dir: string | undefined = node?.dir;
       if (dir === undefined) {

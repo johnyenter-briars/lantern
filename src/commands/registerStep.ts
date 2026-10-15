@@ -78,7 +78,7 @@ export function registerStepCommands(serviceFor: (c: Client) => MetadataService,
 /** Message, table, stage, mode, filtering columns, and images, with columns picked from metadata. */
 async function guided(arg: unknown, serviceFor: (c: Client) => MetadataService, onDone: (client: Client) => void): Promise<void> {
   const node = arg as { client?: Client; assembly?: string; typeName?: string } | undefined;
-  const client = node?.client ?? (await resolveClient(arg));
+  const client = await resolveClient(arg);
   if (!client?.config.org) return;
   const dv = dataverseFor(client);
 

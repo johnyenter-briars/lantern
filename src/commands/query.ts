@@ -13,17 +13,11 @@ import { dataverseFor } from "../ui/auth";
 import { confirmProtected, clientForPath, resolveClient, scanAll, settings, withProgress } from "../ui/context";
 import { columnMarkdown } from "../ui/metadataTree";
 import { ResultsView } from "../ui/results";
+import { activeTenant } from "../ui/tenantContext";
 
-const HEADER = /^\s*(?:--|<!--)\s*Dataverse:\s*([\w.-]+)/m;
-
-/** The client a query document targets: its folder, or a "-- Dataverse: <client>" line for files elsewhere. */
+/** Queries always run against the selected tenant, including saved queries and old query documents. */
 export function clientForQuery(doc: vscode.TextDocument): Client | undefined {
-  if (doc.uri.scheme === "file") {
-    const c = clientForPath(doc.uri.fsPath);
-    if (c) return c;
-  }
-  const name = HEADER.exec(doc.getText())?.[1]?.toLowerCase();
-  return name ? scanAll().clients.find((c) => c.name.toLowerCase() === name) : undefined;
+  return activeTenant();
 }
 
 export function isFetchXml(text: string): boolean {
@@ -33,11 +27,11 @@ export function isFetchXml(text: string): boolean {
 export async function newQuery(arg?: unknown): Promise<void> {
   const client = await resolveClient(arg);
   if (!client?.config.org) {
-    if (client) void vscode.window.showWarningMessage(`Set "org" in ${client.name}/client.json first.`);
+    if (client) void vscode.window.showWarningMessage(`Set "org" in ${client.name}/.lantern/config.json first.`);
     return;
   }
   const content = [
-    `-- Dataverse: ${client.name}`,
+    `-- Tenant: ${client.name}`,
     "-- Run with F5 (or the Run link above). Select text to run just that part. Queries are read-only.",
     "",
     "SELECT TOP 50 name, createdon",
@@ -86,7 +80,7 @@ export async function runQueryCommand(
     if (!client) return;
   }
   if (!client.config.org) {
-    void vscode.window.showWarningMessage(`Set "org" in ${client.name}/client.json first.`);
+    void vscode.window.showWarningMessage(`Set "org" in ${client.name}/.lantern/config.json first.`);
     return;
   }
   const selection = editor && editor.document === doc && !editor.selection.isEmpty ? doc.getText(editor.selection) : undefined;

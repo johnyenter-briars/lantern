@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 /** Settings carried over from when this extension was called Dataverse Workspace (prefix dataverseWorkspace.*). */
 const KEYS = [
-  "clientsFolder", "autoConfigureNewFolders", "authMethod", "publishAfterPush", "pushOnSave", "plugins.buildConfiguration",
+  "authMethod", "publishAfterPush", "pushOnSave", "plugins.buildConfiguration",
   "pacPath", "dotnetPath", "azPath", "xrmDefinitelyTypedPath", "codeLens.enabled", "metadata.completions", "query.maxRows",
 ];
 const LEGACY_SECTION = "dataverseWorkspace";

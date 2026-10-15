@@ -152,7 +152,7 @@ export function registerScaffolding(onChanged: () => void): vscode.Disposable[] 
 
     r("lantern.plugins.newClass", async (arg?: unknown) => {
       const node = arg as { client?: Client; plugin?: PluginProject } | undefined;
-      const client = node?.client ?? (await resolveClient(arg));
+      const client = await resolveClient(arg);
       if (!client) return;
       let project = node?.plugin;
       if (!project) {

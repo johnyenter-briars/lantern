@@ -21,6 +21,7 @@ Lantern for Dataverse is a suite of tools designed to help developers work on Dy
 | **Clients and environments** | A folder per client, optionally linked to its Azure DevOps repo; DEV, TEST, and PROD environments per client; protected environments that confirm before any change; a per-client Microsoft account or app registration |
 | **Solutions** | Pull with a review step, export, import, copy between environments, version bumps, solution checker, generated documentation, environment comparison |
 | **Web resources** | Push and compare from the editor, TypeScript web resources, push on save |
+| **Power Automate** | Browse cloud flows under each solution |
 | **Plug-ins** | Build and push (registers new assemblies and classes, updates existing ones), get source from a registered assembly, compare deployed with local, new projects and classes, step registration |
 | **Script IntelliSense** | Typed `Xrm`, org-specific form types, column, control, tab, and section completions, live warnings, form handler CodeLens |
 | **Queries** | SQL and FetchXML with IntelliSense, `UPDATE`/`DELETE`/`INSERT` with preview, CSV import, run as another user, copy as code, saved and recent queries |
@@ -34,6 +35,12 @@ Lantern for Dataverse is a suite of tools designed to help developers work on Dy
 ## Installation
 
 Lantern runs in VS Code 1.90 or later.
+
+Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to list cloud flows in that solution. The list comes from the selected Dataverse environment and shows each flow's status. Use Lantern's Refresh action to reload it after adding or changing flows.
+
+Run **Lantern: Search** from the Command Palette and enter `/g /pa <flow name>` to search cloud flows in the selected tenant. Results show their index, name, and solution memberships.
+
+Classic workflows and desktop flows are excluded from this list.
 
 ### Install the latest release
 
@@ -80,13 +87,13 @@ The C# Dev Kit extension is recommended for C# IntelliSense.
 
 1. Open the folder that holds (or will hold) your client folders, then click the **Lantern** icon in the activity bar.
 2. Run **Initialize Workspace** once. It creates a `package.json` with `@types/xrm`, a `.gitignore` that keeps client folders out of any repo at this level, and runs `npm install`.
-3. Click **New Client** and answer four prompts: the Azure DevOps repo URL (leave it blank for a local-only folder), the folder name, the org URL, and the solution names.
+3. Click **Add Tenant**, enter the Dataverse URL and optional Entra tenant and solution names, then select the tenant to work with. **New Tenant Folder** also creates a local project folder or clones an Azure DevOps repo.
 
 The **Get started with Lantern** walkthrough (**Help > Get Started**) covers adding a client, signing in, environments, pull, push, and queries.
 
 ## Features
 
-### Clients view
+### Tenants view
 
 Everything about a client lives under its name in one tree:
 
@@ -117,9 +124,9 @@ contoso                        DEV  contoso-dev.crm.dynamics.com  ⎇ main
 - **Solutions** lists the client's solutions and whether each one has been pulled into the folder. The **+** button lists the org's solutions (unmanaged first, with publisher and version) so you can add several at once, then offers to pull. Right-click a solution to remove it from the client (its folder stays) or reveal its folder. An unpacked solution folder the client doesn't list yet shows up dimmed, with a button to add it.
 - **Pack and Import from Your Files…** (right-click a pulled solution) packs what's in your folder with `pac solution pack` and imports it into any environment, which is useful for deploying from source control.
 - Org sections load when you expand them and stay loaded until you click their refresh icon, so redrawing the tree never refetches.
-- Every subfolder of your workspace is a client. New subfolders you create in Explorer are configured automatically, and Lantern's files are added to the repo's `.git/info/exclude`, so they never show up as changes in the client's repo.
+- Configure workspace subfolders as clients using **Configure as Client**. In folder mode, eligible new subfolders can be configured automatically, and Lantern's files are added to the repo's `.git/info/exclude`, so they never show up as changes in the client's repo.
 - **New Client** clones the repo when you give a URL. If the folder already exists, it attaches it to the repo without overwriting local files. It then restores NuGet packages for any `.sln`.
-- Each connected client has inline buttons for **Switch Environment**, **Pull**, **Publish All Customizations**, and **Edit client.json**.
+- Each connected client has inline buttons for **Switch Environment**, **Pull**, **Publish All Customizations**, and **Edit Client Configuration**.
 - The **status bar** shows the active file's client and environment, in the warning color on a protected environment. Click it for that client's actions, including switching environments.
 
 ### Environments (DEV, TEST, PROD)
@@ -376,7 +383,30 @@ None of them change data. They need a VS Code version with language model tools.
 
 ### Client settings
 
-Lantern keeps each client's settings (org, environments, solutions, accounts) in its own storage on your machine, not in the client's folder, so nothing of Lantern's appears in the client's repo. **Edit client.json** (client right-click) opens them, with completions and validation from a JSON schema. A `client.json` already in a folder moves to the storage the next time VS Code starts, unless the repo tracks it (then a team committed it on purpose, and it stays). To keep settings in the folder instead, set `lantern.clientSettingsLocation` to `folder`.
+Lantern uses one selected tenant at a time. In the default `global` mode, saved tenants live in Lantern's global extension storage and are available in every VS Code window. No tenant is selected when a window opens; use **Select Tenant** or **Add Tenant** at the top of the Tenants view. In `folder` mode, only tenants in `.lantern/config.json` at an open workspace root are available. Set `defaultTenant` to a tenant name to select it when the folder opens. **Edit Tenant Configuration** opens the active mode's JSON. Switching modes never moves or deletes settings. Root-level `client.json`, root-level `config.json`, `.lantern/client.json`, and `xdt.json` are ignored.
+
+For multiple tenants in one local config, use a list. `defaultTenant` selects the tenant when the folder opens, and each tenant's `defaultEnvironment` selects its initial Dataverse environment. **Switch Environment** changes the current window without changing that default.
+
+```json
+{
+  "defaultTenant": "Contoso",
+  "tenants": [
+    {
+      "name": "Contoso",
+      "defaultEnvironment": "DEV",
+      "environments": [
+        { "name": "DEV", "org": "https://contoso-dev.crm.dynamics.com", "defaultBrowser": "firefox", "defaultProfile": "contoso-dev" },
+        { "name": "PROD", "org": "https://contoso.crm.dynamics.com", "protected": true }
+      ],
+      "solutions": ["ContosoCore"]
+    }
+  ]
+}
+```
+
+Set `defaultBrowser` and `defaultProfile` on an environment to open its Dataverse and Power Automate links with `firefox -P <profile> <url>`. Without `defaultBrowser`, Lantern uses the system default browser. Clicking a flow or typing its search result number opens its Power Automate editor.
+
+Existing single-tenant `.lantern/config.json` files still load with the folder name as their tenant name.
 
 ```json
 {
@@ -404,14 +434,12 @@ Lantern keeps each client's settings (org, environments, solutions, accounts) in
 
 The one file Lantern writes into a client folder is `jsconfig.json`, which typed Xrm IntelliSense needs. Lantern adds it, and its other local files (`typings/`, `.pull-backup/`, `exports/`), to the local exclude list (`.git/info/exclude`) of whichever repo holds the folder, even when the repo's root is above it. They never show in Source Control and no `.gitignore` changes are needed. Turn the file off with `lantern.createJsconfig`.
 
-Lantern only configures a workspace subfolder as a client automatically when it's a repo of its own (a cloned client) or the workspace folder isn't a repo. If you open a repo directly, its project folders are left alone. **Remove Lantern from Folder…** (client right-click) removes Lantern's settings and the `jsconfig.json` it created, and keeps the folder from being configured again.
+In folder mode, Lantern only configures a workspace subfolder as a client automatically when it's a repo of its own (a cloned client) or the workspace folder isn't a repo. If you open a repo directly, its project folders are left alone. **Remove Lantern from Folder…** (client right-click) removes Lantern's settings and the `jsconfig.json` it created, and keeps the folder from being configured again.
 
 ### VS Code settings
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `lantern.clientsFolder` | first workspace folder | Folder holding client folders |
-| `lantern.autoConfigureNewFolders` | `true` | Configure new subfolders of the clients folder automatically |
 | `lantern.authMethod` | `vscode` | `azureCli` if a tenant blocks VS Code's Microsoft sign-in |
 | `lantern.publishAfterPush` | `true` | Publish web resources after pushing |
 | `lantern.pushOnSave` | `false` | Push web resources when saved |
@@ -423,7 +451,7 @@ Lantern only configures a workspace subfolder as a client automatically when it'
 | `lantern.metadata.completions` | `true` | Column, control, tab, and section suggestions and hovers |
 | `lantern.diagnostics.enabled` | `true` | Live warnings in form scripts |
 | `lantern.query.maxRows` | `5000` | Row limit for queries without `TOP`, and for `UPDATE`/`DELETE` |
-| `lantern.clientSettingsLocation` | `outside` | Keep client settings in Lantern's storage (`outside`) or in `client.json` in the folder (`folder`) |
+| `lantern.clientSettingsLocation` | `global` | Use globally saved tenants (`global`) or tenants from a workspace root's `.lantern/config.json` (`folder`) |
 | `lantern.createJsconfig` | `true` | Create `jsconfig.json` in client folders for typed Xrm IntelliSense |
 
 ## Sign-in and multiple accounts

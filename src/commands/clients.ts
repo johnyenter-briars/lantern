@@ -1,18 +1,20 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { Client, ensureClientConfig, isClientFolderName, normalizeOrg, slugify } from "../core/clients";
+import { Client, isClientFolderName, normalizeOrg, slugify, writeJsconfig } from "../core/clients";
 import { UserError } from "../core/errors";
-import { findFiles, writeJson } from "../core/files";
+import { findFiles, isInside, writeJson } from "../core/files";
 import { connectRepo, repoNameFromUrl } from "../core/git";
 import { run } from "../core/process";
-import { primaryRoot, resolveClient, settings, withProgress, write } from "../ui/context";
+import { primaryRoot, resolveClient, settings, withProgress, workspaceRoots, write } from "../ui/context";
+import { activeTenant, addTenant, tenantConfigFile, tenantMode } from "../ui/tenantContext";
+import { openEnvironmentUrl } from "../ui/environmentBrowser";
 
 /** Sets up the parent folder: package.json with @types/xrm, a .gitignore that keeps client clones out. */
 export async function initWorkspace(): Promise<void> {
   const root = primaryRoot();
   if (!root) {
-    void vscode.window.showWarningMessage("Open the folder that will hold your client folders first.");
+    void vscode.window.showWarningMessage("Open a project folder first.");
     return;
   }
   await withProgress("Initializing Dataverse workspace", async (ctx) => {
@@ -40,10 +42,10 @@ export async function initWorkspace(): Promise<void> {
 export async function newClient(onDone: () => void): Promise<void> {
   const root = primaryRoot();
   if (!root) {
-    void vscode.window.showWarningMessage("Open the folder that will hold your client folders first.");
+    void vscode.window.showWarningMessage("Open a project folder first.");
     return;
   }
-  const title = "New Dataverse client";
+  const title = "New Dataverse tenant folder";
 
   const repoUrl = await vscode.window.showInputBox({
     title: `${title} (1/4)`,
@@ -63,7 +65,7 @@ export async function newClient(onDone: () => void): Promise<void> {
       const s = slugify(v);
       if (!s) return "Enter a name.";
       if (!isClientFolderName(s)) return `"${s}" is reserved.`;
-      if (fs.existsSync(path.join(root, s)) && !repoUrl) return `${s} already exists. Use "Configure as Client" on it instead.`;
+      if (fs.existsSync(path.join(root, s)) && !repoUrl) return `${s} already exists. Use "Configure as Tenant" on it instead.`;
       return undefined;
     },
   });
@@ -71,7 +73,7 @@ export async function newClient(onDone: () => void): Promise<void> {
 
   const org = await vscode.window.showInputBox({
     title: `${title} (3/4)`,
-    prompt: "Dataverse org URL. Optional; you can add it to client.json later.",
+    prompt: "Dataverse org URL. Optional; you can add it to .lantern/config.json later.",
     placeHolder: "https://contoso.crm.dynamics.com",
     ignoreFocusOut: true,
   });
@@ -95,39 +97,50 @@ export async function newClient(onDone: () => void): Promise<void> {
     } else {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const c = ensureClientConfig(dir, { org: normalizeOrg(org), solutions: solutions.split(",").map((s: string) => s.trim()).filter(Boolean) }, { jsconfig: settings().createJsconfig });
+    if (settings().createJsconfig && !fs.existsSync(path.join(dir, "jsconfig.json"))) writeJsconfig(dir, "generic");
+    const c = addTenant(slugify(name), {
+      folder: tenantMode() === "folder" ? path.relative(root, dir) : dir,
+      org: normalizeOrg(org),
+      solutions: solutions.split(",").map((s: string) => s.trim()).filter(Boolean),
+    }, root);
     progress.report({ message: "restoring .NET packages..." });
     await restoreDotnet(c, ctx.log);
     return c;
   });
-  onDone();
   if (!client) return;
+  onDone();
 
-  const actions = client.config.org && client.config.solutions.length ? ["Pull from Dataverse", "Open client.json"] : ["Open client.json"];
+  const actions = client.config.org && client.config.solutions.length ? ["Pull from Dataverse", "Edit Tenant Configuration"] : ["Edit Tenant Configuration"];
   const choice = await vscode.window.showInformationMessage(`${client.name} is ready.`, ...actions);
   if (choice === "Pull from Dataverse") await vscode.commands.executeCommand("lantern.pull", client);
-  if (choice === "Open client.json") await openClientConfig(client);
+  if (choice === "Edit Tenant Configuration") await openClientConfig(client);
 }
 
 export async function configureFolder(arg: unknown, onDone: () => void): Promise<void> {
   const dir = (arg as { dir?: string })?.dir ?? (arg as vscode.Uri)?.fsPath;
   if (!dir) return;
-  const client = ensureClientConfig(dir, {}, { jsconfig: settings().createJsconfig });
+  const root = workspaceRoots().find((folder) => isInside(dir, folder));
+  if (!root) throw new UserError("Open the project in a workspace folder first.");
+  if (settings().createJsconfig && !fs.existsSync(path.join(dir, "jsconfig.json"))) writeJsconfig(dir, "generic");
+  const client = addTenant(path.basename(dir), { folder: tenantMode() === "folder" ? path.relative(root, dir) || "." : dir }, root);
   await restoreDotnet(client, write);
   onDone();
-  void vscode.window.showInformationMessage(`${client.name} is configured. Add the org URL to client.json to connect it.`);
+  void vscode.window.showInformationMessage(`${client.name} is configured. Add its org URL in the tenant configuration to connect it.`);
 }
 
 export async function openClientConfig(arg?: unknown): Promise<void> {
-  const client = await resolveClient(arg);
-  if (!client) return;
-  await vscode.window.showTextDocument(vscode.Uri.file(client.configFile));
+  const file = activeTenant()?.configFile ?? tenantConfigFile();
+  if (!file || !fs.existsSync(file)) {
+    void vscode.window.showInformationMessage("No tenant configuration exists yet. Use Lantern: Add Tenant to create one.");
+    return;
+  }
+  await vscode.window.showTextDocument(vscode.Uri.file(file));
 }
 
 export async function openInBrowser(arg?: unknown): Promise<void> {
   const client = await resolveClient(arg);
   if (!client?.config.org) return;
-  await vscode.env.openExternal(vscode.Uri.parse(`${client.config.org}/main.aspx`));
+  await openEnvironmentUrl(client, `${client.config.org}/main.aspx`);
 }
 
 /** Restores NuGet packages for any C# solutions so C# Dev Kit has IntelliSense right away. Non-fatal. */
