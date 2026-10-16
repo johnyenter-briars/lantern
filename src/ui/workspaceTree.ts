@@ -134,6 +134,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
       this.loaded.delete(`${clientKey(node.client)}|webresources|${node.unique.toLowerCase()}`);
       this.loaded.delete(`${clientKey(node.client)}|flows|${node.unique.toLowerCase()}`);
       this.serviceFor(node.client).forget("solution-tables/");
+      this.serviceFor(node.client).forget("solution-components/");
     }
     if (node && node.kind === "client") for (const k of [...this.loaded.keys()]) if (k.startsWith(`${node.client.name}@`)) this.loaded.delete(k);
     if (node && (node.kind === "client" || node.kind === "plugin" || node.kind === "remoteAssembly" || (node.kind === "group" && (node.group === "plugins" || node.group === "pluginProjects")))) forgetOrgPlugins(node.client);
@@ -257,7 +258,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
           const svc = this.serviceFor(c);
           const [tables, inSolution] = await Promise.all([svc.tables(), svc.solutionTables([node.unique])]);
           const own = new Set(inSolution);
-          const list = tables.filter((t) => own.has(t.logicalName)).map((table): MetaNode => ({ kind: "table", client: c, table }));
+          const list = tables.filter((t) => own.has(t.logicalName)).map((table): MetaNode => ({ kind: "table", client: c, table, solution: node.unique }));
           return list.length ? list : [message("No tables in this solution")];
         }
         const key = `${clientKey(c)}|webresources|${node.unique.toLowerCase()}`;

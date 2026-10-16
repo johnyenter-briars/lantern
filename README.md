@@ -118,7 +118,7 @@ Environment
     Environment                your account, roles, IDs, links
 ```
 
-- **Solutions** lists the configured solution names. The **+** button lists the org's solutions (unmanaged first, with publisher and version) so you can add several at once. Right-click a solution to remove it from the tenant configuration.
+- **Solutions** lists the configured solution names. The **+** button lists the org's solutions (unmanaged first, with publisher and version) so you can add several at once. Right-click a solution to remove it from the tenant configuration. Columns and forms under a solution's table show only that solution's components; tables set to include all objects show all their columns and forms. **All tables** remains org-wide.
 - Org sections load when you expand them and stay loaded until you click their refresh icon, so redrawing the tree never refetches.
 - Configure workspace subfolders as clients using **Configure as Client**. In folder mode, eligible new subfolders can be configured automatically, and Lantern's files are added to the repo's `.git/info/exclude`, so they never show up as changes in the client's repo.
 - **New Client** clones the repo when you give a URL. If the folder already exists, it attaches it to the repo without overwriting local files. It then restores NuGet packages for any `.sln`.

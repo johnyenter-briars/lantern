@@ -6,6 +6,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 
 ### Changed
 
+- Columns and forms under a solution's table show only components included in that solution, including tables configured to include all objects. All tables remains environment-wide.
+
 - The Lantern sidebar has separate Solutions and Environment panes. Org-wide items and their existing actions now appear under Environment.
 
 - Solutions in the tenant tree come only from the configured solution names. Solution pull, its review panel, automatic local folder matching, and Pack and Import from Your Files have been removed.
