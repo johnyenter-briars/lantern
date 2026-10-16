@@ -5,8 +5,9 @@ import { searchPowerAutomateFlows } from "../core/dataverseSearch";
 import { Client } from "../core/clients";
 import { openPowerAutomateFlow } from "../commands/openPowerAutomateFlow";
 import { dataverseFor } from "./auth";
-import { reportError } from "./context";
+import { reportError, write } from "./context";
 import { activeTenant } from "./tenantContext";
+import { logEvent } from "../core/logger";
 
 interface SearchPanelRow {
   index: number;
@@ -63,10 +64,13 @@ export function showSearchPanel(): void {
     latestClient = undefined;
     const parsed = parseSearchCommand(message.input);
     if (!("command" in parsed)) {
+      logEvent(`Search command rejected: ${parsed.error}`);
       await current.webview.postMessage({ type: "error", message: parsed.error });
       return;
     }
 
+    const started = Date.now();
+    logEvent(`Search started: scope=${parsed.command.scope}${parsed.command.scope === "solution" ? ` solution=${parsed.command.solutionUniqueName}` : ""} query=${JSON.stringify(parsed.command.query)}`);
     await current.webview.postMessage({ type: "loading" });
     try {
       const tenant = activeTenant();
@@ -89,12 +93,14 @@ export function showSearchPanel(): void {
       }));
       latestRows = rows;
       latestClient = tenant.envName ? tenant.withEnvironment(tenant.envName) : tenant;
+      logEvent(`Search completed: ${rows.length} flow(s) in ${Date.now() - started} ms`);
       await current.webview.postMessage({
         type: "results",
         rows,
       });
     } catch (error) {
       if (panel !== current || generation !== searchGeneration) return;
+      write(`Search failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
       await current.webview.postMessage({ type: "error", message: error instanceof Error ? error.message : String(error) });
     }
   });

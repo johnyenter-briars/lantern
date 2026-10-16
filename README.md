@@ -442,6 +442,10 @@ In folder mode, Lantern only configures a workspace subfolder as a client automa
 | `lantern.clientSettingsLocation` | `global` | Use globally saved tenants (`global`) or tenants from a workspace root's `.lantern/config.json` (`folder`) |
 | `lantern.createJsconfig` | `true` | Create `jsconfig.json` in client folders for typed Xrm IntelliSense |
 
+### Logs
+
+Lantern writes a daily log to `~/.lantern/log/YYYY-MM-DD.log` (for example, `C:\Users\you\.lantern\log\2026-10-16.log` on Windows). It includes Lantern Output, reported errors, search activity, Dataverse request status and timing, and command-line process exit status. Dataverse request logs omit authentication tokens, query parameters, and request bodies.
+
 ## Sign-in and multiple accounts
 
 Lantern signs in two ways, and both follow the account you choose for each client:

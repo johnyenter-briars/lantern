@@ -29,7 +29,7 @@ import { registerScaffolding } from "./commands/scaffold";
 import { registerPcfAndPages } from "./commands/pcfPages";
 import { registerCustomApisAndForms } from "./commands/customApi";
 import { registerCopilotTools } from "./ui/copilot";
-import { clientForPath, reportError, resolveClient, SECTION, settings, withProgress, workspaceRoots } from "./ui/context";
+import { clientForPath, reportError, resolveClient, SECTION, settings, withProgress, workspaceRoots, write } from "./ui/context";
 import { ClientStatusBar, DataverseCodeLens } from "./ui/editor";
 import { Client } from "./core/clients";
 import { MetadataService } from "./core/metadata";
@@ -43,8 +43,15 @@ import { openSearch } from "./commands/search";
 import { addTenantCommand, selectTenantCommand } from "./commands/tenants";
 import { configureTenantContext, importSavedTenants, removeTenant } from "./ui/tenantContext";
 import { registerTraceCommands, TraceDocProvider, TraceTree } from "./ui/traceTree";
+import { startFileLogging } from "./core/logger";
 
 export function activate(context: vscode.ExtensionContext): void {
+  try {
+    const file = startFileLogging();
+    write(`Lantern log: ${file}\n`);
+  } catch (error) {
+    reportError(error);
+  }
   const statusBar = new ClientStatusBar();
   const contentProvider = new DataverseContentProvider();
 

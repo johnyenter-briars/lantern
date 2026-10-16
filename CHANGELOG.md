@@ -14,6 +14,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 
 ### Added
 
+- Daily logs in the user's `~/.lantern/log` folder capture Lantern output, errors, search activity, Dataverse request outcomes, and process exit status.
+
 - **Power Automate flows** under each solution: browse cloud flows in the active environment with their status, then click to open the designer in VS Code's Integrated Browser. Requires a desktop VS Code build with Integrated Browser support; portal sign-in is separate from Dataverse sign-in.
 
 ## 0.9.5
