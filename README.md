@@ -8,6 +8,7 @@ Lantern for Dataverse is a suite of tools designed to help developers work on Dy
 - [Installation](#installation)
 - [Getting started](#getting-started)
 - [Features](#features)
+- [Search](#search)
 - [Configuration](#configuration)
 - [Sign-in and multiple accounts](#sign-in-and-multiple-accounts)
 - [Contributing](#contributing)
@@ -35,12 +36,6 @@ Lantern for Dataverse is a suite of tools designed to help developers work on Dy
 ## Installation
 
 Lantern runs in VS Code 1.90 or later.
-
-Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to list cloud flows in that solution. The list comes from the selected Dataverse environment and shows each flow's status. Use Lantern's Refresh action to reload it after adding or changing flows.
-
-Run **Lantern: Search** from the Command Palette and enter `/pa <flow name>` to search cloud flows in the selected tenant. `/g /pa <flow name>` does the same, while `/s <solution unique name> /pa <flow name>` limits results to that solution. Results show their index, name, and solution memberships.
-
-Classic workflows and desktop flows are excluded from this list.
 
 ### Install the latest release
 
@@ -156,6 +151,24 @@ Right-click a solution for:
 - **Generate Documentation** writes `docs/<solution>.md`: tables with their custom columns and choices, forms with their libraries and event handlers, web resources with the functions in each and where they run, plug-in steps on those tables, and the solution's environment variables.
 
 Each client gets its own pac auth profile, named after the folder, so switching between client tenants needs no manual `pac auth select`.
+
+### Search
+
+Run **Lantern: Search** from the Command Palette to search the selected tenant's active Dataverse environment. Supported formats are:
+
+- `pa <flow name>` — search all cloud flows. Global scope is the default.
+- `g pa <flow name>` — explicitly search all cloud flows.
+- `s <solution unique name> pa <flow name>` — search only flows in that solution, for example `s CrmCore pa test`.
+
+| Parameter | Value | Meaning |
+| --- | --- | --- |
+| `g` | None | Optional global scope. Searches the selected environment regardless of solution membership. |
+| `s` | Solution unique name, such as `CrmCore` | Limits results to that solution. Put it first. |
+| `pa` | Flow name text, such as `test` | Searches Power Automate cloud flow names containing that text. Required in every format. |
+
+Results show each flow's index, name, and solution memberships. The Default Solution is omitted from the membership list. Select a result to open its flow editor. Classic workflows and desktop flows are excluded.
+
+Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to browse flows in that solution. Use Lantern's Refresh action to reload the list after changing flows.
 
 ### Web resources
 
