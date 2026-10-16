@@ -41,7 +41,7 @@ import { CellContext, ResultsView } from "./ui/results";
 import { editUserSettings } from "./commands/userSettings";
 import { openSearch } from "./commands/search";
 import { addTenantCommand, selectTenantCommand } from "./commands/tenants";
-import { configureTenantContext, importSavedTenants, removeTenant } from "./ui/tenantContext";
+import { activeTenant, configureTenantContext, importSavedTenants, removeTenant } from "./ui/tenantContext";
 import { registerTraceCommands, TraceDocProvider, TraceTree } from "./ui/traceTree";
 import { startFileLogging } from "./core/logger";
 
@@ -82,12 +82,37 @@ export function activate(context: vscode.ExtensionContext): void {
   useQueryHistory(history, () => clients.refresh());
   const diagnostics = new ScriptDiagnostics(serviceFor);
   const checker = vscode.languages.createDiagnosticCollection("lantern-checker");
-  const clientsView = vscode.window.createTreeView("lantern.clients", { treeDataProvider: clients, showCollapseAll: true });
+  const clientsView = vscode.window.createTreeView("lantern.clients", { treeDataProvider: clients.forPane("solutions"), showCollapseAll: true });
+  const environmentView = vscode.window.createTreeView("lantern.environment", { treeDataProvider: clients.forPane("environment"), showCollapseAll: true });
 
+  let checkedConnection: string | undefined;
+  let connectionCheckVersion = 0;
+  const checkActiveConnection = (): void => {
+    const client = activeTenant();
+    if (!client?.config.org) { checkedConnection = undefined; connectionCheckVersion++; return; }
+    const key = [client.configFile, client.name, client.envName, client.config.org, client.config.tenant,
+      client.config.account, client.config.appId, settings().authMethod].join("|");
+    if (key === checkedConnection) return;
+    checkedConnection = key;
+    const version = ++connectionCheckVersion;
+    void dataverseFor(client).whoAmI().then(() => {
+      if (checkedConnection === key && version === connectionCheckVersion) clients.refresh();
+    }).catch((error: unknown) => {
+      if (checkedConnection !== key || version !== connectionCheckVersion) return;
+      const message = error instanceof Error ? error.message : String(error);
+      write(`Connection check for ${client.name} (${client.orgHost}): ${message}\n`);
+      if (/cancelled/i.test(message)) return;
+      if (/sign.in|account|token|secret|401|403|Azure CLI/i.test(message)) {
+        void vscode.window.showWarningMessage(`Lantern couldn't authenticate to ${client.orgHost}: ${message}`, "Sign In As…")
+          .then((choice) => { if (choice) void vscode.commands.executeCommand("lantern.signInAs", client); });
+      }
+    });
+  };
   const refreshAll = (): void => {
     clients.refresh();
     statusBar.update();
     codeLens.refresh();
+    checkActiveConnection();
   };
   /** After a plug-in push or download: plug-in projects, steps, and plug-in CodeLens all change. */
   const pluginsChanged = (): void => {
@@ -107,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     clientsView,
+    environmentView,
     vscode.workspace.registerTextDocumentContentProvider(TableDocProvider.scheme, tableDocs),
     vscode.workspace.registerTextDocumentContentProvider(TraceDocProvider.scheme, traceDocs),
     vscode.languages.registerCompletionItemProvider({ language: "sql" }, new SqlCompletions(serviceFor), "."),
@@ -144,12 +170,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     // From a plug-in class's "N steps" CodeLens: show that class under Plug-ins > Projects, steps expanded.
     cmd("focusSteps", async (arg?: Client | { client?: Client; typeName?: string }) => {
-      await vscode.commands.executeCommand("lantern.clients.focus");
+      await vscode.commands.executeCommand("lantern.environment.focus");
       clients.reloadSections("steps");
       const client = arg instanceof Client ? arg : arg?.client;
       if (!client) return;
       const target = await clients.revealTarget(client, arg instanceof Client ? undefined : arg?.typeName);
-      if (target) await clientsView.reveal(target, { select: true, focus: true, expand: true });
+      if (target) await environmentView.reveal(target, { select: true, focus: true, expand: true });
     }),
     ...registerFetchInCode(),
     ...registerScaffolding(refreshAll),
@@ -251,6 +277,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration(SECTION)) {
         if (e.affectsConfiguration(`${SECTION}.clientSettingsLocation`)) setUpClientSettingsStore(context);
         clearTokenCache();
+        checkedConnection = undefined;
         refreshAll();
       }
     })
@@ -261,6 +288,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   void noticeLegacyExtension();
   setUpClientSettingsStore(context);
+  checkActiveConnection();
   vscode.workspace.textDocuments.forEach((doc: vscode.TextDocument) => setExtensionlessLanguage(doc));
   statusBar.update();
   for (const doc of vscode.workspace.textDocuments) diagnostics.schedule(doc, 0);

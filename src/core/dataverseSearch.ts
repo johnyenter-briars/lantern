@@ -1,6 +1,36 @@
 import type { Client } from "./clients";
 import type { DataverseClient } from "./dataverse";
 import type { SolutionFlow } from "./flows";
+import { fetchOrgSolutions, OrgSolution } from "./admin";
+
+/** Rank exact, prefix, substring, and ordered-character matches. */
+function solutionMatchScore(solution: OrgSolution, text: string): number | undefined {
+  const query = text.toLowerCase();
+  const unique = solution.uniqueName.toLowerCase();
+  const friendly = solution.friendlyName.toLowerCase();
+  if (unique === query) return 0;
+  if (unique.startsWith(query)) return 1;
+  if (friendly.startsWith(query)) return 2;
+  if (unique.includes(query)) return 3;
+  if (friendly.includes(query)) return 4;
+  const subsequence = (value: string): boolean => {
+    let index = 0;
+    for (const char of value) if (char === query[index]) index++;
+    return index === query.length;
+  };
+  if (subsequence(unique)) return 5;
+  if (subsequence(friendly)) return 6;
+  return undefined;
+}
+
+/** Search visible Dataverse solutions by unique and display name. */
+export async function searchSolutions(query: string, dv: DataverseClient): Promise<OrgSolution[]> {
+  const matches = (await fetchOrgSolutions(dv))
+    .map((solution) => ({ solution, score: solutionMatchScore(solution, query.trim()) }))
+    .filter((entry): entry is { solution: OrgSolution; score: number } => entry.score !== undefined);
+  return matches.sort((a, b) => a.score - b.score || a.solution.friendlyName.localeCompare(b.solution.friendlyName))
+    .map((entry) => entry.solution);
+}
 
 export interface PowerAutomateFlowSearchResult {
   client: Client;

@@ -1,15 +1,17 @@
 import { randomBytes } from "crypto";
 import * as vscode from "vscode";
 import { parseSearchCommand } from "../core/commandParser";
-import { searchPowerAutomateFlows } from "../core/dataverseSearch";
+import { searchPowerAutomateFlows, searchSolutions } from "../core/dataverseSearch";
 import { Client } from "../core/clients";
 import { openPowerAutomateFlow } from "../commands/openPowerAutomateFlow";
+import { openSolution } from "../commands/openSolution";
 import { dataverseFor } from "./auth";
 import { reportError, write } from "./context";
 import { activeTenant } from "./tenantContext";
 import { logEvent } from "../core/logger";
 
-interface SearchPanelRow {
+interface FlowSearchPanelRow {
+  kind: "flow";
   index: number;
   flowId: string;
   name: string;
@@ -18,6 +20,18 @@ interface SearchPanelRow {
   solutions: string[];
   state: number;
 }
+
+interface SolutionSearchPanelRow {
+  kind: "solution";
+  index: number;
+  solutionId: string;
+  name: string;
+  uniqueName: string;
+  version: string;
+  managed: boolean;
+}
+
+type SearchPanelRow = FlowSearchPanelRow | SolutionSearchPanelRow;
 
 let panel: vscode.WebviewPanel | undefined;
 let latestRows: SearchPanelRow[] = [];
@@ -51,7 +65,8 @@ export function showSearchPanel(): void {
       const client = latestClient;
       if (!selected || !client) return;
       try {
-        await openPowerAutomateFlow(client, selected.flowId);
+        if (selected.kind === "solution") await openSolution(client, selected.solutionId);
+        else await openPowerAutomateFlow(client, selected.flowId);
         current.dispose();
       }
       catch (error) { reportError(error); }
@@ -70,19 +85,47 @@ export function showSearchPanel(): void {
     }
 
     const started = Date.now();
-    logEvent(`Search started: scope=${parsed.command.scope}${parsed.command.scope === "solution" ? ` solution=${parsed.command.solutionUniqueName}` : ""} query=${JSON.stringify(parsed.command.query)}`);
-    await current.webview.postMessage({ type: "loading" });
+    const command = parsed.command;
+    logEvent(`Search started: component=${command.component}${command.component === "powerAutomateFlow" ? ` scope=${command.scope}${command.scope === "solution" ? ` solution=${command.solutionUniqueName}` : ""}` : ""} query=${JSON.stringify(command.query)}`);
+    await current.webview.postMessage({ type: "loading", kind: command.component });
     try {
       const tenant = activeTenant();
       if (!tenant) throw new Error("Select a tenant in Lantern before searching.");
+      const dv = dataverseFor(tenant);
+      if (command.component === "solution") {
+        const matches = await searchSolutions(command.query, dv);
+        if (panel !== current || generation !== searchGeneration) return;
+        latestClient = tenant;
+        const exact = matches.find((solution) => solution.uniqueName.toLowerCase() === command.query.toLowerCase());
+        if (exact) {
+          logEvent(`Search exact solution: ${exact.uniqueName} (${Date.now() - started} ms)`);
+          await openSolution(tenant, exact.id);
+          current.dispose();
+          return;
+        }
+        const rows: SolutionSearchPanelRow[] = matches.map((solution, index) => ({
+          kind: "solution",
+          index: index + 1,
+          solutionId: solution.id,
+          name: solution.friendlyName,
+          uniqueName: solution.uniqueName,
+          version: solution.version,
+          managed: solution.managed,
+        }));
+        latestRows = rows;
+        logEvent(`Search completed: ${rows.length} solution(s) in ${Date.now() - started} ms`);
+        await current.webview.postMessage({ type: "results", kind: "solution", rows });
+        return;
+      }
       const results = await searchPowerAutomateFlows(
         tenant,
-        parsed.command.query,
-        dataverseFor(tenant),
-        parsed.command.scope === "solution" ? parsed.command.solutionUniqueName : undefined
+        command.query,
+        dv,
+        command.scope === "solution" ? command.solutionUniqueName : undefined
       );
       if (panel !== current || generation !== searchGeneration) return;
-      const rows: SearchPanelRow[] = results.map(({ client, flow, solutions }, index) => ({
+      const rows: FlowSearchPanelRow[] = results.map(({ client, flow, solutions }, index) => ({
+        kind: "flow",
         index: index + 1,
         flowId: flow.id,
         name: flow.name,
@@ -96,6 +139,7 @@ export function showSearchPanel(): void {
       logEvent(`Search completed: ${rows.length} flow(s) in ${Date.now() - started} ms`);
       await current.webview.postMessage({
         type: "results",
+        kind: "powerAutomateFlow",
         rows,
       });
     } catch (error) {
@@ -256,8 +300,8 @@ function renderSearchHtml(webview: vscode.Webview): string {
         <a class="help" id="help" href="https://github.com/nbrandt7/lantern" title="Search commands on GitHub" aria-label="Search commands on GitHub"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"></circle><path d="M10 9v5M10 6v1"></path></svg></a>
       </form>
       <section class="results-wrap" id="resultsWrap" aria-label="Search results" hidden>
-        <div class="columns grid" aria-hidden="true"><span>#</span><span>Name</span><span>Solutions</span></div>
-        <div class="rows" id="rows" role="listbox" aria-label="Power Automate flows"></div>
+        <div class="columns grid" aria-hidden="true"><span>#</span><span>Name</span><span id="thirdColumn">Solutions</span></div>
+        <div class="rows" id="rows" role="listbox" aria-label="Search results"></div>
       </section>
     </section>
   </main>
@@ -267,6 +311,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
     const queryInput = document.getElementById('query');
     const resultsWrap = document.getElementById('resultsWrap');
     const rowsContainer = document.getElementById('rows');
+    const thirdColumn = document.getElementById('thirdColumn');
     let resultIndexes = [];
     let numberBuffer = '';
     let numberTimer;
@@ -295,6 +340,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
     });
     form.addEventListener('submit', (event) => {
       event.preventDefault();
+      queryInput.focus();
       resultIndexes = [];
       numberBuffer = '';
       clearTimeout(numberTimer);
@@ -310,6 +356,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
 
     function renderRows(data) {
       rowsContainer.replaceChildren();
+      thirdColumn.textContent = data.kind === 'solution' ? 'Unique name' : 'Solutions';
       resultIndexes = data.rows.map((row) => row.index);
       for (const row of data.rows) {
         const button = document.createElement('button');
@@ -317,7 +364,9 @@ function renderSearchHtml(webview: vscode.Webview): string {
         button.type = 'button';
         button.setAttribute('role', 'option');
         button.setAttribute('aria-selected', 'false');
-        button.setAttribute('aria-label', row.index + '. ' + row.name + (row.solutions.length ? ', solutions: ' + row.solutions.join(', ') : ''));
+        button.setAttribute('aria-label', data.kind === 'solution'
+          ? row.index + '. ' + row.name + ', unique name: ' + row.uniqueName
+          : row.index + '. ' + row.name + (row.solutions.length ? ', solutions: ' + row.solutions.join(', ') : ''));
         button.append(textCell('number', String(row.index)));
 
         const name = document.createElement('span');
@@ -326,15 +375,21 @@ function renderSearchHtml(webview: vscode.Webview): string {
         title.textContent = row.name;
         const meta = document.createElement('small');
         meta.className = 'flow-meta';
-        const dot = document.createElement('span');
-        dot.className = row.state === 1 ? 'state' : 'state off';
-        meta.append(dot, document.createTextNode(row.client + ' · ' + row.environment));
+        if (data.kind === 'solution') {
+          meta.textContent = [row.version, row.managed ? 'Managed' : 'Unmanaged'].filter(Boolean).join(' · ');
+        } else {
+          const dot = document.createElement('span');
+          dot.className = row.state === 1 ? 'state' : 'state off';
+          meta.append(dot, document.createTextNode(row.client + ' · ' + row.environment));
+        }
         name.append(title, meta);
         button.append(name);
 
         const solutions = document.createElement('span');
         solutions.className = 'solutions';
-        if (row.solutions.length) {
+        if (data.kind === 'solution') {
+          solutions.append(textCell('solution', row.uniqueName));
+        } else if (row.solutions.length) {
           for (const solution of row.solutions) solutions.append(textCell('solution', solution));
         }
         button.append(solutions);
@@ -347,9 +402,8 @@ function renderSearchHtml(webview: vscode.Webview): string {
 
       resultsWrap.hidden = false;
       if (!data.rows.length) {
-        rowsContainer.append(textCell('empty', 'No matching Power Automate flows.'));
+        rowsContainer.append(textCell('empty', data.kind === 'solution' ? 'No matching solutions.' : 'No matching Power Automate flows.'));
       }
-      if (data.rows.length) { rowsContainer.tabIndex = -1; rowsContainer.focus(); }
     }
 
     window.addEventListener('message', (event) => {
@@ -357,7 +411,7 @@ function renderSearchHtml(webview: vscode.Webview): string {
       if (message.type === 'loading') {
         resultsWrap.hidden = false;
         rowsContainer.replaceChildren();
-        rowsContainer.append(textCell('empty', 'Searching Power Automate flows…'));
+        rowsContainer.append(textCell('empty', message.kind === 'solution' ? 'Searching solutions…' : 'Searching Power Automate flows…'));
       } else if (message.type === 'results') {
         renderRows(message);
       } else if (message.type === 'error') {

@@ -1,25 +1,20 @@
-interface SearchTarget {
-  component: "powerAutomateFlow";
-  query: string;
-}
-
-export type DataverseSearchCommand = SearchTarget & (
-  | { scope: "global" }
-  | { scope: "solution"; solutionUniqueName: string }
-);
+export type DataverseSearchCommand =
+  | { component: "solution"; query: string }
+  | { component: "powerAutomateFlow"; query: string; scope: "global" }
+  | { component: "powerAutomateFlow"; query: string; scope: "solution"; solutionUniqueName: string };
 
 export type SearchCommandParseResult =
   | { command: DataverseSearchCommand }
   | { error: string };
 
-/** Parse `pa invoice`, `g pa invoice`, or `s MySolution pa invoice`. */
+/** Parse flow searches and `s MySolution` solution navigation. */
 export function parseSearchCommand(input: string): SearchCommandParseResult {
   const text = input.trim();
-  const solution = text.match(/^s\s+(\S+)\s+pa(?:\s+(.+))?$/i);
-  if (solution) {
-    const query = solution[2]?.trim();
+  const solutionFlow = text.match(/^s\s+(\S+)\s+pa(?:\s+(.+))?$/i);
+  if (solutionFlow) {
+    const query = solutionFlow[2]?.trim();
     if (!query) return { error: "Add a flow name after pa." };
-    return { command: { scope: "solution", solutionUniqueName: solution[1], component: "powerAutomateFlow", query } };
+    return { command: { scope: "solution", solutionUniqueName: solutionFlow[1], component: "powerAutomateFlow", query } };
   }
   const global = text.match(/^(?:g\s+)?pa(?:\s+(.+))?$/i);
   if (global) {
@@ -27,5 +22,8 @@ export function parseSearchCommand(input: string): SearchCommandParseResult {
     if (!query) return { error: "Add a flow name after pa." };
     return { command: { scope: "global", component: "powerAutomateFlow", query } };
   }
-  return { error: "Use pa <flow name> or s <solution unique name> pa <flow name>." };
+  const solution = text.match(/^s\s+(.+)$/i);
+  if (solution) return { command: { component: "solution", query: solution[1].trim() } };
+  if (/^s$/i.test(text)) return { error: "Add a solution name after s." };
+  return { error: "Use pa <flow name>, s <solution name>, or s <solution unique name> pa <flow name>." };
 }

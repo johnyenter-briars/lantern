@@ -6,6 +6,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 
 ### Changed
 
+- The Lantern sidebar has separate Solutions and Environment panes. Org-wide items and their existing actions now appear under Environment.
+
 - Solutions in the tenant tree come only from the configured solution names. Solution pull, its review panel, automatic local folder matching, and Pack and Import from Your Files have been removed.
 
 - Internal storage mode ignores local configuration files and requires explicit client initialization. Switching storage modes does not migrate or delete settings; folder mode uses `.lantern/config.json` independently.
@@ -13,6 +15,10 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 - Local client settings use only `.lantern/config.json`. Root-level `client.json`, `config.json`, and legacy `xdt.json` are no longer discovered or migrated as client settings.
 
 ### Added
+
+- Lantern checks the selected Dataverse connection when it starts or the tenant or environment changes, prompting for sign-in before the first command when needed.
+
+- Search opens an exact solution unique name with `s <name>` or lists fuzzy solution matches for partial names.
 
 - Daily logs in the user's `~/.lantern/log` folder capture Lantern output, errors, search activity, Dataverse request outcomes, and process exit status.
 

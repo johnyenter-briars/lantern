@@ -88,32 +88,34 @@ The **Get started with Lantern** walkthrough (**Help > Get Started**) covers add
 
 ## Features
 
-### Tenants view
+### Solutions and Environment views
 
-Everything about a client lives under its name in one tree:
+Lantern has two panes in its sidebar. Each shows the selected tenant; Solutions contains its configured solutions, and Environment contains the org-wide items:
 
 ```
-contoso                        DEV  contoso-dev.crm.dynamics.com  ⎇ main
-  Solutions                                                   [+]
+Solutions                                                    [+]
+  contoso                      DEV  contoso-dev.crm.dynamics.com  ⎇ main
     ContosoCore
       Tables                   this solution's tables
       Web resources            click to open a local copy when available, or Dataverse's
     ContosoExtras
-  Plug-ins
-    Projects                   your plug-in projects, matched to the active environment
-      Contoso.Plugins          Plugins/Contoso.Plugins
-        1.0.0.3 in DEV         what's registered
-        AccountPlugin          2 steps, 1 off
-        ContactPlugin          not registered yet
-        OldPlugin              only in DEV (registered, gone from your code)
-      Contoso.Legacy           2.1.0.0 in DEV, no project here
-    Steps                      every custom step in the org, grouped by assembly
-    Traces                     errors only, last 24 hours
-  Queries                      saved queries, plus Recent
-  All tables                   every table in the org
-  System jobs                  failed, last 24 hours
-  Environment variables
-  Environment                  your account, roles, IDs, links
+Environment
+  contoso                      DEV  contoso-dev.crm.dynamics.com  ⎇ main
+    Plug-ins
+      Projects                 your plug-in projects, matched to the active environment
+        Contoso.Plugins        Plugins/Contoso.Plugins
+          1.0.0.3 in DEV       what's registered
+          AccountPlugin        2 steps, 1 off
+          ContactPlugin        not registered yet
+          OldPlugin            only in DEV (registered, gone from your code)
+        Contoso.Legacy         2.1.0.0 in DEV, no project here
+      Steps                    every custom step in the org, grouped by assembly
+      Traces                   errors only, last 24 hours
+    Queries                    saved queries, plus Recent
+    All tables                 every table in the org
+    System jobs                failed, last 24 hours
+    Environment variables
+    Environment                your account, roles, IDs, links
 ```
 
 - **Solutions** lists the configured solution names. The **+** button lists the org's solutions (unmanaged first, with publisher and version) so you can add several at once. Right-click a solution to remove it from the tenant configuration.
@@ -158,15 +160,16 @@ Run **Lantern: Search** from the Command Palette to search the selected tenant's
 
 - `pa <flow name>` — search all cloud flows. Global scope is the default.
 - `g pa <flow name>` — explicitly search all cloud flows.
+- `s <solution name>` — open a solution by exact unique name, for example `s CrmCore`. A partial name such as `s crm` lists matching solutions to choose from.
 - `s <solution unique name> pa <flow name>` — search only flows in that solution, for example `s CrmCore pa test`.
 
 | Parameter | Value | Meaning |
 | --- | --- | --- |
 | `g` | None | Optional global scope. Searches the selected environment regardless of solution membership. |
-| `s` | Solution unique name, such as `CrmCore` | Limits results to that solution. Put it first. |
-| `pa` | Flow name text, such as `test` | Searches Power Automate cloud flow names containing that text. Required in every format. |
+| `s` | Solution unique name or partial solution name, such as `CrmCore` or `crm` | On its own, opens an exact unique-name match or lists fuzzy matches. Before `pa`, limits flow results to that unique name. |
+| `pa` | Flow name text, such as `test` | Searches Power Automate cloud flow names containing that text. Required for flow searches. |
 
-Results show each flow's index, name, and solution memberships. The Default Solution is omitted from the membership list. Select a result to open its flow editor. Classic workflows and desktop flows are excluded.
+Flow results show each flow's index, name, and solution memberships. The Default Solution is omitted from the membership list. Select a flow to open its editor. Solution results show friendly and unique names; select one to open its Power Apps solution page using the active environment's configured browser and profile. Classic workflows and desktop flows are excluded from flow results.
 
 Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to browse flows in that solution. Use Lantern's Refresh action to reload the list after changing flows.
 
@@ -184,9 +187,9 @@ Expand **Tenants > selected tenant > Solutions > your solution > Power Automate 
 
 ### Plug-ins
 
-Lantern treats a plug-in project in your folder and its registration in Dataverse as one thing. The assembly is matched by name, and each class by its full type name, which is the name Dataverse stores for a plug-in type. The Plug-ins list in the Clients view, the CodeLens on each class, and the steps and traces that open a class all use the same matching.
+Lantern treats a plug-in project in your folder and its registration in Dataverse as one thing. The assembly is matched by name, and each class by its full type name, which is the name Dataverse stores for a plug-in type. The Plug-ins list in the Environment view, the CodeLens on each class, and the steps and traces that open a class all use the same matching.
 
-**Build and Push Plug-in** (`Ctrl+Alt+U` in a plug-in class, the CodeLens above each class, the Clients view, or a `.csproj` in Explorer) runs `dotnet build`, reads the built DLL, and registers it through the Dataverse Web API. There's no `pac` step and no IDs to paste.
+**Build and Push Plug-in** (`Ctrl+Alt+U` in a plug-in class, the CodeLens above each class, the Environment view, or a `.csproj` in Explorer) runs `dotnet build`, reads the built DLL, and registers it through the Dataverse Web API. There's no `pac` step and no IDs to paste.
 
 - The first push registers the assembly (sandboxed, stored in Dataverse) and a plug-in type for every plug-in and workflow activity class, and asks which solution to add it to.
 - Later pushes replace the registered assembly's content, so its steps stay, and register any classes that are new.
@@ -273,7 +276,7 @@ Metadata is cached per org in VS Code's storage (never in client repos), so afte
 
 ### SQL and FetchXML queries
 
-**New Query** (the database icon in the Clients view, or a client's right-click menu) opens a SQL document aimed at that client. Write SQL against Dataverse tables and press **F5** (or click **Run** above the query). Select part of the document to run just that part. Several statements separated by `;` or `GO` each get their own results.
+**New Query** (the database icon in the Environment view, or a tenant's right-click menu) opens a SQL document aimed at that tenant. Write SQL against Dataverse tables and press **F5** (or click **Run** above the query). Select part of the document to run just that part. Several statements separated by `;` or `GO` each get their own results.
 
 ```sql
 SELECT TOP 50 a.name, a.revenue, c.fullname AS primary_contact
@@ -384,7 +387,7 @@ None of them change data. They need a VS Code version with language model tools.
 
 ### Client settings
 
-Lantern uses one selected tenant at a time. In the default `global` mode, saved tenants live in Lantern's global extension storage and are available in every VS Code window. No tenant is selected when a window opens; use **Select Tenant** or **Add Tenant** at the top of the Tenants view. In `folder` mode, only tenants in `.lantern/config.json` at an open workspace root are available. Set `defaultTenant` to a tenant name to select it when the folder opens. **Edit Tenant Configuration** opens the active mode's JSON. Switching modes never moves or deletes settings. Root-level `client.json`, root-level `config.json`, `.lantern/client.json`, and `xdt.json` are ignored.
+Lantern uses one selected tenant at a time. In the default `global` mode, saved tenants live in Lantern's global extension storage and are available in every VS Code window. No tenant is selected when a window opens; use **Select Tenant** or **Add Tenant** at the top of the Solutions view. In `folder` mode, only tenants in `.lantern/config.json` at an open workspace root are available. Set `defaultTenant` to a tenant name to select it when the folder opens. **Edit Tenant Configuration** opens the active mode's JSON. Switching modes never moves or deletes settings. Root-level `client.json`, root-level `config.json`, `.lantern/client.json`, and `xdt.json` are ignored.
 
 For multiple tenants in one local config, use a list. `defaultTenant` selects the tenant when the folder opens, and each tenant's `defaultEnvironment` selects its initial Dataverse environment. **Switch Environment** changes the current window without changing that default.
 

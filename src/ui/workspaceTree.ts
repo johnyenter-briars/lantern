@@ -97,6 +97,25 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
     return this.parents.get(node);
   }
 
+  /** Both sidebar panes share the same nodes, cache, and refresh events. */
+  forPane(pane: "solutions" | "environment"): vscode.TreeDataProvider<TreeNode> {
+    return {
+      onDidChangeTreeData: this.onDidChangeTreeData,
+      getTreeItem: (node) => this.getTreeItem(node),
+      getParent: (node) => this.getParent(node),
+      getChildren: async (node) => {
+        const children = await this.getChildren(node);
+        if (node?.kind !== "client") return children;
+        if (pane === "environment") return children.filter((child) => child.kind !== "group" || child.group !== "solutions");
+        const solutionsGroup = children.find((child) => child.kind === "group" && child.group === "solutions");
+        if (!solutionsGroup) return [];
+        const solutions = await this.getChildren(solutionsGroup);
+        for (const solution of solutions) this.parents.set(solution, node);
+        return solutions;
+      },
+    };
+  }
+
   constructor(
     private readonly serviceFor: (c: Client) => MetadataService,
     readonly metadata: MetadataTree,
@@ -478,9 +497,9 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
       case "client": {
         const c = node.client;
         const branch = "branch" in node ? node.branch : "";
-        const item = new vscode.TreeItem(c.name, C.Collapsed);
+        const item = new vscode.TreeItem(c.name, C.Expanded);
         item.description = [c.envName, c.orgHost || "no org set", branch ? `⎇ ${branch}` : ""].filter(Boolean).join("  ");
-        item.iconPath = new vscode.ThemeIcon(c.isRepo ? "repo" : "folder", c.isProtected ? new vscode.ThemeColor("charts.orange") : undefined);
+        item.iconPath = new vscode.ThemeIcon("globe", c.isProtected ? new vscode.ThemeColor("charts.orange") : undefined);
         item.contextValue = c.config.org ? "client.connected" : "client";
         item.resourceUri = vscode.Uri.file(c.dir);
         const md = new vscode.MarkdownString();
@@ -507,7 +526,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
       case "group": {
         const label = { solutions: "Solutions", plugins: "Plug-ins", pluginProjects: "Projects", queries: "Queries", pcf: "PCF controls", pages: "Power Pages sites" }[node.group];
         const item = new vscode.TreeItem(label, C.Collapsed);
-        item.iconPath = new vscode.ThemeIcon({ solutions: "package", plugins: "plug", pluginProjects: "project", queries: "database", pcf: "extensions", pages: "globe" }[node.group]);
+        item.iconPath = new vscode.ThemeIcon({ solutions: "package", plugins: "plug", pluginProjects: "project", queries: "database", pcf: "extensions", pages: "browser" }[node.group]);
         if (node.group === "plugins") item.tooltip = "Your plug-in projects, matched class by class to what's registered, and the org's plug-in steps and traces.";
         if (node.group === "pluginProjects") item.tooltip = "Plug-in projects in this folder, then registered assemblies that have no project here.";
         if (node.group === "pcf" || node.group === "pages") {
@@ -542,7 +561,7 @@ export class WorkspaceTree implements vscode.TreeDataProvider<TreeNode> {
       }
       case "pagesSite": {
         const item = new vscode.TreeItem(path.basename(node.dir), C.None);
-        item.iconPath = new vscode.ThemeIcon("globe");
+        item.iconPath = new vscode.ThemeIcon("browser");
         item.contextValue = "pagesSite";
         item.resourceUri = vscode.Uri.file(node.dir);
         item.command = { command: "revealInExplorer", title: "Reveal", arguments: [vscode.Uri.file(node.dir)] };
