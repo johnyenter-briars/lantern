@@ -5,7 +5,6 @@ import { languageForExtensionless } from "./core/solutions";
 import { configureFolder, initWorkspace, newClient, openClientConfig, openInBrowser } from "./commands/clients";
 import { generateEarlyBound, generateJsTypes } from "./commands/build";
 import { compareDeployed, getPluginSource, pushPlugin } from "./commands/plugins";
-import { pullCommand, registerReviewCommands } from "./commands/pull";
 import { compareWebResource, DataverseContentProvider, newFormScript, onSavePush, pushWebResources } from "./commands/webResources";
 import { clearTokenCache, dataverseFor } from "./ui/auth";
 import { WorkspaceTree } from "./ui/workspaceTree";
@@ -32,7 +31,6 @@ import { registerCustomApisAndForms } from "./commands/customApi";
 import { registerCopilotTools } from "./ui/copilot";
 import { clientForPath, reportError, resolveClient, SECTION, settings, withProgress, workspaceRoots } from "./ui/context";
 import { ClientStatusBar, DataverseCodeLens } from "./ui/editor";
-import { ReviewTree } from "./ui/review";
 import { Client } from "./core/clients";
 import { MetadataService } from "./core/metadata";
 import { registerMetadataCommands, TableDocProvider } from "./commands/metadata";
@@ -47,7 +45,6 @@ import { configureTenantContext, importSavedTenants, removeTenant } from "./ui/t
 import { registerTraceCommands, TraceDocProvider, TraceTree } from "./ui/traceTree";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const review = new ReviewTree();
   const statusBar = new ClientStatusBar();
   const contentProvider = new DataverseContentProvider();
 
@@ -79,8 +76,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const diagnostics = new ScriptDiagnostics(serviceFor);
   const checker = vscode.languages.createDiagnosticCollection("lantern-checker");
   const clientsView = vscode.window.createTreeView("lantern.clients", { treeDataProvider: clients, showCollapseAll: true });
-  const reviewView = vscode.window.createTreeView("lantern.review", { treeDataProvider: review, canSelectMany: true });
-  review.attach(reviewView);
 
   const refreshAll = (): void => {
     clients.refresh();
@@ -105,7 +100,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     clientsView,
-    reviewView,
     vscode.workspace.registerTextDocumentContentProvider(TableDocProvider.scheme, tableDocs),
     vscode.workspace.registerTextDocumentContentProvider(TraceDocProvider.scheme, traceDocs),
     vscode.languages.registerCompletionItemProvider({ language: "sql" }, new SqlCompletions(serviceFor), "."),
@@ -211,9 +205,6 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage("Cleared cached Dataverse tokens. Manage the Microsoft account itself from the Accounts menu.");
     }),
 
-    // Pull and review
-    cmd("pull", (arg) => pullCommand(review, arg, refreshAll)),
-    ...registerReviewCommands(review, refreshAll),
 
     // Web resources
     cmd("pushWebResource", (arg, selection) => pushWebResources(arg, selection)),
@@ -305,7 +296,6 @@ async function clientActions(arg: unknown): Promise<void> {
   if (!client) return;
   const doc = vscode.window.activeTextEditor?.document;
   const items: Array<{ label: string; command: string; args: unknown[] }> = [
-    { label: "$(cloud-download) Pull from Dataverse", command: "pull", args: [client] },
   ];
   // Only offer the open file when it belongs to this client.
   if (doc && doc.uri.scheme === "file" && clientForPath(doc.uri.fsPath)?.dir === client.dir) {

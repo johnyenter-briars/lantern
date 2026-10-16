@@ -6,6 +6,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 
 ### Changed
 
+- Solutions in the tenant tree come only from the configured solution names. Solution pull, its review panel, automatic local folder matching, and Pack and Import from Your Files have been removed.
+
 - Internal storage mode ignores local configuration files and requires explicit client initialization. Switching storage modes does not migrate or delete settings; folder mode uses `.lantern/config.json` independently.
 
 - Local client settings use only `.lantern/config.json`. Root-level `client.json`, `config.json`, and legacy `xdt.json` are no longer discovered or migrated as client settings.
