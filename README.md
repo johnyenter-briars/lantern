@@ -38,7 +38,7 @@ Lantern runs in VS Code 1.90 or later.
 
 Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to list cloud flows in that solution. The list comes from the selected Dataverse environment and shows each flow's status. Use Lantern's Refresh action to reload it after adding or changing flows.
 
-Run **Lantern: Search** from the Command Palette and enter `/g /pa <flow name>` to search cloud flows in the selected tenant. Results show their index, name, and solution memberships.
+Run **Lantern: Search** from the Command Palette and enter `/pa <flow name>` to search cloud flows in the selected tenant. `/g /pa <flow name>` does the same, while `/s <solution unique name> /pa <flow name>` limits results to that solution. Results show their index, name, and solution memberships.
 
 Classic workflows and desktop flows are excluded from this list.
 
