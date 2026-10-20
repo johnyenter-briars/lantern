@@ -1,10 +1,11 @@
 import { randomBytes } from "crypto";
 import * as vscode from "vscode";
-import { parseSearchCommand } from "../core/commandParser";
-import { searchPowerAutomateFlows, searchSolutions } from "../core/dataverseSearch";
+import { AppAction, parseSearchCommand } from "../core/commandParser";
+import { ComponentSearchResult, searchComponents, searchPowerAutomateFlows, searchSolutions } from "../core/dataverseSearch";
 import { Client } from "../core/clients";
 import { openPowerAutomateFlow } from "../commands/openPowerAutomateFlow";
 import { openSolution } from "../commands/openSolution";
+import { openMakerComponent } from "../commands/openMakerComponent";
 import { dataverseFor } from "./auth";
 import { reportError, write } from "./context";
 import { activeTenant } from "./tenantContext";
@@ -19,6 +20,7 @@ interface FlowSearchPanelRow {
   environment: string;
   solutions: string[];
   state: number;
+  solutionId?: string;
 }
 
 interface SolutionSearchPanelRow {
@@ -31,7 +33,12 @@ interface SolutionSearchPanelRow {
   managed: boolean;
 }
 
-type SearchPanelRow = FlowSearchPanelRow | SolutionSearchPanelRow;
+interface ComponentSearchPanelRow extends ComponentSearchResult {
+  index: number;
+  appAction?: AppAction;
+}
+
+type SearchPanelRow = FlowSearchPanelRow | SolutionSearchPanelRow | ComponentSearchPanelRow;
 
 let panel: vscode.WebviewPanel | undefined;
 let latestRows: SearchPanelRow[] = [];
@@ -66,7 +73,8 @@ export function showSearchPanel(): void {
       if (!selected || !client) return;
       try {
         if (selected.kind === "solution") await openSolution(client, selected.solutionId);
-        else await openPowerAutomateFlow(client, selected.flowId);
+        else if (selected.kind === "flow") await openPowerAutomateFlow(client, selected.flowId, selected.solutionId);
+        else await openMakerComponent(client, selected, selected.appAction);
         current.dispose();
       }
       catch (error) { reportError(error); }
@@ -86,7 +94,7 @@ export function showSearchPanel(): void {
 
     const started = Date.now();
     const command = parsed.command;
-    logEvent(`Search started: component=${command.component}${command.component === "powerAutomateFlow" ? ` scope=${command.scope}${command.scope === "solution" ? ` solution=${command.solutionUniqueName}` : ""}` : ""} query=${JSON.stringify(command.query)}`);
+    logEvent(`Search started: component=${command.component}${command.component !== "solution" ? ` scope=${command.scope}${command.scope === "solution" ? ` solution=${command.solutionUniqueName}` : ""}${command.component === "app" ? ` action=${command.action}` : ""}` : ""} query=${JSON.stringify(command.query)}`);
     await current.webview.postMessage({ type: "loading", kind: command.component });
     try {
       const tenant = activeTenant();
@@ -117,6 +125,19 @@ export function showSearchPanel(): void {
         await current.webview.postMessage({ type: "results", kind: "solution", rows });
         return;
       }
+      if (command.component !== "powerAutomateFlow") {
+        const matches = await searchComponents(command.component, command.query, dv,
+          command.scope === "solution" ? command.solutionUniqueName : undefined);
+        if (panel !== current || generation !== searchGeneration) return;
+        const rows: ComponentSearchPanelRow[] = matches.map((match, index) => ({
+          ...match, index: index + 1, appAction: command.component === "app" ? command.action : undefined,
+        }));
+        latestRows = rows;
+        latestClient = tenant.envName ? tenant.withEnvironment(tenant.envName) : tenant;
+        logEvent(`Search completed: ${rows.length} ${command.component}(s) in ${Date.now() - started} ms`);
+        await current.webview.postMessage({ type: "results", kind: command.component, rows });
+        return;
+      }
       const results = await searchPowerAutomateFlows(
         tenant,
         command.query,
@@ -124,7 +145,7 @@ export function showSearchPanel(): void {
         command.scope === "solution" ? command.solutionUniqueName : undefined
       );
       if (panel !== current || generation !== searchGeneration) return;
-      const rows: FlowSearchPanelRow[] = results.map(({ client, flow, solutions }, index) => ({
+      const rows: FlowSearchPanelRow[] = results.map(({ client, flow, solutions, solutionId }, index) => ({
         kind: "flow",
         index: index + 1,
         flowId: flow.id,
@@ -133,6 +154,7 @@ export function showSearchPanel(): void {
         environment: client.orgHost || client.config.org || "Unknown environment",
         solutions,
         state: flow.state,
+        solutionId,
       }));
       latestRows = rows;
       latestClient = tenant.envName ? tenant.withEnvironment(tenant.envName) : tenant;
@@ -377,10 +399,12 @@ function renderSearchHtml(webview: vscode.Webview): string {
         meta.className = 'flow-meta';
         if (data.kind === 'solution') {
           meta.textContent = [row.version, row.managed ? 'Managed' : 'Unmanaged'].filter(Boolean).join(' · ');
-        } else {
+        } else if (row.kind === 'flow') {
           const dot = document.createElement('span');
           dot.className = row.state === 1 ? 'state' : 'state off';
           meta.append(dot, document.createTextNode(row.client + ' · ' + row.environment));
+        } else {
+          meta.textContent = row.detail;
         }
         name.append(title, meta);
         button.append(name);
@@ -402,7 +426,8 @@ function renderSearchHtml(webview: vscode.Webview): string {
 
       resultsWrap.hidden = false;
       if (!data.rows.length) {
-        rowsContainer.append(textCell('empty', data.kind === 'solution' ? 'No matching solutions.' : 'No matching Power Automate flows.'));
+        const names = { solution: 'solutions', powerAutomateFlow: 'Power Automate flows', table: 'tables', businessRule: 'business rules', app: 'apps' };
+        rowsContainer.append(textCell('empty', 'No matching ' + (names[data.kind] || 'components') + '.'));
       }
     }
 
@@ -411,7 +436,8 @@ function renderSearchHtml(webview: vscode.Webview): string {
       if (message.type === 'loading') {
         resultsWrap.hidden = false;
         rowsContainer.replaceChildren();
-        rowsContainer.append(textCell('empty', message.kind === 'solution' ? 'Searching solutions…' : 'Searching Power Automate flows…'));
+        const names = { solution: 'solutions', powerAutomateFlow: 'Power Automate flows', table: 'tables', businessRule: 'business rules', app: 'apps' };
+        rowsContainer.append(textCell('empty', 'Searching ' + (names[message.kind] || 'components') + '…'));
       } else if (message.type === 'results') {
         renderRows(message);
       } else if (message.type === 'error') {

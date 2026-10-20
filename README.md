@@ -156,20 +156,27 @@ Each client gets its own pac auth profile, named after the folder, so switching 
 
 ### Search
 
-Run **Lantern: Search** from the Command Palette to search the selected tenant's active Dataverse environment. Supported formats are:
+Run **Lantern: Search** from the Command Palette to search the selected tenant's active Dataverse environment. Each command is:
 
-- `pa <flow name>` — search all cloud flows. Global scope is the default.
-- `g pa <flow name>` — explicitly search all cloud flows.
-- `s <solution name>` — open a solution by exact unique name, for example `s CrmCore`. A partial name such as `s crm` lists matching solutions to choose from.
-- `s <solution unique name> pa <flow name>` — search only flows in that solution, for example `s CrmCore pa test`.
-
-| Parameter | Value | Meaning |
+| Command | What it searches | Example |
 | --- | --- | --- |
-| `g` | None | Optional global scope. Searches the selected environment regardless of solution membership. |
-| `s` | Solution unique name or partial solution name, such as `CrmCore` or `crm` | On its own, opens an exact unique-name match or lists fuzzy matches. Before `pa`, limits flow results to that unique name. |
-| `pa` | Flow name text, such as `test` | Searches Power Automate cloud flow names containing that text. Required for flow searches. |
+| `pa <flow name>` | Power Automate cloud flows by name. | `pa test` |
+| `t <table name>` | Tables by display, logical, or schema name. | `t account` |
+| `br <business rule name>` | Business rules by name. | `br approval` |
+| `a <app name> e` | Model-driven, canvas, and code apps by name; `e` opens the selected app for editing. | `a sales e` |
+| `a <app name> r` | Model-driven, canvas, and code apps by name; `r` runs the selected app. | `a sales r` |
+| `s <solution name>` | Solutions by unique or friendly name. An exact unique name opens directly; a partial name shows matches. | `s CrmCore` or `s crm` |
 
-Flow results show each flow's index, name, and solution memberships. The Default Solution is omitted from the membership list. Select a flow to open its editor. Solution results show friendly and unique names; select one to open its Power Apps solution page using the active environment's configured browser and profile. Classic workflows and desktop flows are excluded from flow results.
+Component searches are global by default. To make the scope explicit, put `g` first: `g pa test`, `g t account`, `g br approval`, or `g a sales r`. To search only one solution, put `s <solution unique name>` first: `s CrmCore pa test`, `s CrmCore t account`, `s CrmCore br approval`, or `s CrmCore a sales e`. A solution-scoped result opens in that solution's context. App searches always require `e` or `r` at the end.
+
+| Scope parameter | Value | Meaning |
+| --- | --- | --- |
+| `g` | None | Explicitly searches the whole selected environment. |
+| `s` | Exact solution unique name when followed by a component command | Limits that component search to one solution. Used alone, it searches solution names. |
+
+Results show each component's index, name, and solution memberships. The Default Solution is omitted from the membership list. Select a component to open it in the active environment's configured browser and profile. Solution results show friendly and unique names. Classic workflows and desktop flows are excluded from `pa` results.
+
+Code apps run in the browser, but their source is edited locally. Selecting a code app from an `a ... e` search reports that Lantern cannot locate its source from Dataverse.
 
 Expand **Tenants > selected tenant > Solutions > your solution > Power Automate flows** to browse flows in that solution. Use Lantern's Refresh action to reload the list after changing flows.
 

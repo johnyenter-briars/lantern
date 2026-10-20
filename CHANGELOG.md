@@ -6,6 +6,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 
 ### Changed
 
+- App searches now require a trailing `e` to edit or `r` to run. The selected action determines the app URL, with distinct handling for model-driven, canvas, and code apps.
+
 - Columns and forms under a solution's table show only components included in that solution, including tables configured to include all objects. All tables remains environment-wide.
 
 - The Lantern sidebar has separate Solutions and Environment panes. Org-wide items and their existing actions now appear under Environment.
@@ -17,6 +19,8 @@ All notable changes to Lantern for Dataverse are listed here, newest first.
 - Local client settings use only `.lantern/config.json`. Root-level `client.json`, `config.json`, and legacy `xdt.json` are no longer discovered or migrated as client settings.
 
 ### Added
+
+- Search now supports `t` tables, `br` business rules, and `a` model-driven, canvas, and code apps. Prefix a component search with `s <solution unique name>` to limit results and open the selection in that solution.
 
 - Lantern checks the selected Dataverse connection when it starts or the tenant or environment changes, prompting for sign-in before the first command when needed.
 
